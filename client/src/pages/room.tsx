@@ -2,8 +2,8 @@ import { useState, useEffect, useRef } from "react";
 import { useRoute, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Mic, MicOff, Video, VideoOff, Monitor, MonitorOff, MessageSquare, Users, Settings, Phone, Radio, Copy, Check, UserPlus, Hand, Smile } from "lucide-react";
-import { VideoGrid } from "@/components/video-grid";
+import { Mic, MicOff, Video, VideoOff, Monitor, MonitorOff, MessageSquare, Users, Settings, Phone, Radio, Copy, Check, UserPlus, Hand, Smile, Grid3x3, UserCircle } from "lucide-react";
+import { VideoGrid, type ViewMode } from "@/components/video-grid";
 import { ChatPanel } from "@/components/chat-panel";
 import { ParticipantsPanel } from "@/components/participants-panel";
 import { SettingsPanel, type AudioSettings, type VideoSettings } from "@/components/settings-panel";
@@ -45,6 +45,7 @@ export default function Room() {
   const [reactions, setReactions] = useState<Array<{ id: string; emoji: string }>>([]);
   const [recordingCountdown, setRecordingCountdown] = useState<number | null>(null);
   const [hideSelfView, setHideSelfView] = useState(false);
+  const [viewMode, setViewMode] = useState<"grid" | "speaker">("grid");
   const recordingControlsRef = useRef<{ toggleRecording: () => void; cancelCountdown: () => void } | null>(null);
   
   const [participants, setParticipants] = useState<Participant[]>([]);
@@ -747,6 +748,7 @@ export default function Room() {
               remoteStreams={remoteStreams}
               hideSelfView={hideSelfView}
               peers={peersRef.current}
+              viewMode={viewMode}
             />
           </div>
 
@@ -854,6 +856,17 @@ export default function Room() {
                 data-testid="button-toggle-participants"
               >
                 <Users className="w-5 h-5" />
+              </Button>
+
+              <Button
+                size="icon"
+                variant={viewMode === "speaker" ? "default" : "secondary"}
+                onClick={() => setViewMode(viewMode === "grid" ? "speaker" : "grid")}
+                className="rounded-full w-12 h-12"
+                data-testid="button-toggle-view"
+                title={viewMode === "grid" ? "Switch to Speaker View" : "Switch to Grid View"}
+              >
+                {viewMode === "grid" ? <UserCircle className="w-5 h-5" /> : <Grid3x3 className="w-5 h-5" />}
               </Button>
 
               <Button

@@ -9,6 +9,8 @@ import { useActiveSpeaker, type ParticipantAudioLevel } from "@/hooks/use-active
 import { useConnectionQuality } from "@/hooks/use-connection-quality";
 import { NetworkIndicator } from "@/components/network-indicator";
 
+export type ViewMode = "grid" | "speaker";
+
 interface VideoGridProps {
   participants: Participant[];
   localStream: MediaStream | null;
@@ -18,15 +20,25 @@ interface VideoGridProps {
   remoteStreams?: Map<string, MediaStream>;
   hideSelfView?: boolean;
   peers?: Map<string, any>;
+  viewMode?: ViewMode;
 }
 
-export function VideoGrid({ participants, localStream, screenStream, currentParticipantId, videoSettings, remoteStreams, hideSelfView = false, peers }: VideoGridProps) {
+export function VideoGrid({ participants, localStream, screenStream, currentParticipantId, videoSettings, remoteStreams, hideSelfView = false, peers, viewMode = "grid" }: VideoGridProps) {
   const [participantLevels, setParticipantLevels] = useState<ParticipantAudioLevel[]>([]);
   const activeSpeakerId = useActiveSpeaker(participantLevels);
 
   const visibleParticipants = hideSelfView 
     ? participants.filter(p => p.id !== currentParticipantId)
     : participants;
+  
+  // In speaker view, separate the active speaker from others
+  const speakerParticipant = viewMode === "speaker" && activeSpeakerId
+    ? visibleParticipants.find(p => p.id === activeSpeakerId)
+    : null;
+  
+  const otherParticipants = viewMode === "speaker" && speakerParticipant
+    ? visibleParticipants.filter(p => p.id !== activeSpeakerId)
+    : visibleParticipants;
 
   const getGridClass = () => {
     const count = visibleParticipants.length + (screenStream ? 1 : 0);
@@ -53,40 +65,82 @@ export function VideoGrid({ participants, localStream, screenStream, currentPart
     });
   }, []);
 
-  return (
-    <div className={`grid ${getGridClass()} gap-4 h-full w-full`} data-testid="video-grid">
-      {screenStream && (
-        <VideoTile
-          participant={{ id: "screen", name: "Screen Share", roomId: "", isAudioEnabled: false, isVideoEnabled: true, isScreenSharing: true, isHost: false, approvalStatus: "approved", handRaised: false, joinedAt: Date.now() }}
-          stream={screenStream}
-          isSelf={false}
-          isActiveSpeaker={false}
-          onAudioLevelChange={handleAudioLevelChange}
-        />
-      )}
-      
-      {visibleParticipants.map((participant) => {
-        const stream = participant.id === currentParticipantId 
-          ? localStream 
-          : remoteStreams?.get(participant.id) || null;
-        const peer = participant.id !== currentParticipantId 
-          ? peers?.get(participant.id) 
-          : null;
-        const peerConnection = peer?._pc || null;
-        
-        return (
+  const renderVideoTile = (participant: Participant, size?: "large" | "small") => {
+    const stream = participant.id === currentParticipantId 
+      ? localStream 
+      : remoteStreams?.get(participant.id) || null;
+    const peer = participant.id !== currentParticipantId 
+      ? peers?.get(participant.id) 
+      : null;
+    const peerConnection = peer?._pc || null;
+    
+    return (
+      <VideoTile
+        key={participant.id}
+        participant={participant}
+        stream={stream}
+        isSelf={participant.id === currentParticipantId}
+        videoSettings={participant.id === currentParticipantId ? videoSettings : undefined}
+        isActiveSpeaker={participant.id === activeSpeakerId}
+        onAudioLevelChange={handleAudioLevelChange}
+        peerConnection={peerConnection}
+        size={size}
+      />
+    );
+  };
+
+  // Render grid view
+  if (viewMode === "grid") {
+    return (
+      <div className={`grid ${getGridClass()} gap-4 h-full w-full`} data-testid="video-grid">
+        {screenStream && (
           <VideoTile
-            key={participant.id}
-            participant={participant}
-            stream={stream}
-            isSelf={participant.id === currentParticipantId}
-            videoSettings={participant.id === currentParticipantId ? videoSettings : undefined}
-            isActiveSpeaker={participant.id === activeSpeakerId}
+            participant={{ id: "screen", name: "Screen Share", roomId: "", isAudioEnabled: false, isVideoEnabled: true, isScreenSharing: true, isHost: false, approvalStatus: "approved", handRaised: false, joinedAt: Date.now() }}
+            stream={screenStream}
+            isSelf={false}
+            isActiveSpeaker={false}
             onAudioLevelChange={handleAudioLevelChange}
-            peerConnection={peerConnection}
           />
-        );
-      })}
+        )}
+        
+        {visibleParticipants.map((participant) => renderVideoTile(participant))}
+      </div>
+    );
+  }
+
+  // Render speaker view
+  return (
+    <div className="flex flex-col h-full w-full gap-4" data-testid="video-grid-speaker">
+      {/* Main speaker area - prioritize screen share if active */}
+      <div className="flex-1 min-h-0">
+        {screenStream ? (
+          <VideoTile
+            participant={{ id: "screen", name: "Screen Share", roomId: "", isAudioEnabled: false, isVideoEnabled: true, isScreenSharing: true, isHost: false, approvalStatus: "approved", handRaised: false, joinedAt: Date.now() }}
+            stream={screenStream}
+            isSelf={false}
+            isActiveSpeaker={false}
+            onAudioLevelChange={handleAudioLevelChange}
+            size="large"
+          />
+        ) : speakerParticipant ? (
+          renderVideoTile(speakerParticipant, "large")
+        ) : (
+          <div className="h-full flex items-center justify-center bg-muted rounded-lg">
+            <p className="text-muted-foreground">Waiting for someone to speak...</p>
+          </div>
+        )}
+      </div>
+
+      {/* Other participants strip - when screen sharing, show active speaker + others */}
+      {(screenStream ? visibleParticipants : otherParticipants).length > 0 && (
+        <div className="h-32 flex gap-2 overflow-x-auto">
+          {(screenStream ? visibleParticipants : otherParticipants).map((participant) => (
+            <div key={participant.id} className="h-full aspect-video flex-shrink-0">
+              {renderVideoTile(participant, "small")}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -99,9 +153,10 @@ interface VideoTileProps {
   isActiveSpeaker: boolean;
   onAudioLevelChange: (participantId: string, level: number) => void;
   peerConnection?: any;
+  size?: "large" | "small";
 }
 
-function VideoTile({ participant, stream, isSelf, videoSettings, isActiveSpeaker, onAudioLevelChange, peerConnection }: VideoTileProps) {
+function VideoTile({ participant, stream, isSelf, videoSettings, isActiveSpeaker, onAudioLevelChange, peerConnection, size }: VideoTileProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const audioLevel = useAudioLevel(stream, participant.isAudioEnabled);
   const connectionStats = useConnectionQuality(peerConnection);
