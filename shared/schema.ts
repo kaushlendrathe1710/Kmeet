@@ -159,6 +159,18 @@ export const wsMessageSchema = z.discriminatedUnion("type", [
     roomId: z.string(),
     isLocked: z.boolean(),
   }),
+  z.object({
+    type: z.literal("transfer-host"),
+    roomId: z.string(),
+    participantId: z.string(),
+    newHostId: z.string(),
+  }),
+  z.object({
+    type: z.literal("host-transferred"),
+    roomId: z.string(),
+    newHostId: z.string(),
+    newHostName: z.string(),
+  }),
 ]);
 
 export type WSMessage = z.infer<typeof wsMessageSchema>;

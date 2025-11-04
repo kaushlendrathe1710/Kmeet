@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { useRoute, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Mic, MicOff, Video, VideoOff, Monitor, MonitorOff, MessageSquare, Users, Settings, Phone, Radio, Copy, Check, UserPlus, Hand, Smile, Grid3x3, UserCircle, Lock, LockOpen } from "lucide-react";
+import { Mic, MicOff, Video, VideoOff, Monitor, MonitorOff, MessageSquare, Users, Settings, Phone, Radio, Copy, Check, UserPlus, Hand, Smile, Grid3x3, UserCircle, Lock, LockOpen, ArrowRightLeft } from "lucide-react";
 import { VideoGrid, type ViewMode } from "@/components/video-grid";
 import { ChatPanel } from "@/components/chat-panel";
 import { ParticipantsPanel } from "@/components/participants-panel";
@@ -19,6 +19,13 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import type { Participant, ChatMessage } from "@shared/schema";
 
 export default function Room() {
@@ -48,6 +55,7 @@ export default function Room() {
   const [viewMode, setViewMode] = useState<"grid" | "speaker">("grid");
   const [pinnedParticipantId, setPinnedParticipantId] = useState<string | null>(null);
   const [isRoomLocked, setIsRoomLocked] = useState(false);
+  const [showTransferHost, setShowTransferHost] = useState(false);
   const recordingControlsRef = useRef<{ toggleRecording: () => void; cancelCountdown: () => void; pauseRecording: () => void; resumeRecording: () => void } | null>(null);
   
   const [participants, setParticipants] = useState<Participant[]>([]);
@@ -403,6 +411,18 @@ export default function Room() {
         });
         setTimeout(() => setLocation("/"), 2000);
         break;
+
+      case "host-transferred":
+        setParticipants(prev => prev.map(p => ({
+          ...p,
+          isHost: p.id === message.newHostId,
+        })));
+        setIsHost(participantId === message.newHostId);
+        toast({
+          title: "Host Transferred",
+          description: `${message.newHostName} is now the host`,
+        });
+        break;
     }
   };
 
@@ -678,6 +698,19 @@ export default function Room() {
       participantId,
       isLocked: newLockedState,
     }));
+  };
+
+  const transferHost = (newHostId: string) => {
+    if (!isHost) return;
+    
+    wsRef.current?.send(JSON.stringify({
+      type: "transfer-host",
+      roomId,
+      participantId,
+      newHostId,
+    }));
+    
+    setShowTransferHost(false);
   };
 
   const sendMessage = (message: string) => {
@@ -963,6 +996,19 @@ export default function Room() {
                 </Button>
               )}
 
+              {isHost && approvedParticipants.filter(p => p.id !== participantId).length > 0 && (
+                <Button
+                  size="icon"
+                  variant="secondary"
+                  onClick={() => setShowTransferHost(true)}
+                  className="rounded-full w-12 h-12"
+                  data-testid="button-transfer-host"
+                  title="Transfer Host"
+                >
+                  <ArrowRightLeft className="w-5 h-5" />
+                </Button>
+              )}
+
               <div className="w-px h-8 bg-border mx-2" />
 
               <Button
@@ -1026,6 +1072,33 @@ export default function Room() {
             </div>
           </div>
         )}
+
+        <Dialog open={showTransferHost} onOpenChange={setShowTransferHost}>
+          <DialogContent data-testid="transfer-host-dialog">
+            <DialogHeader>
+              <DialogTitle>Transfer Host</DialogTitle>
+              <DialogDescription>
+                Select a participant to transfer host role to. This will grant them full control of the room.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-2">
+              {approvedParticipants
+                .filter(p => p.id !== participantId)
+                .map(participant => (
+                  <Button
+                    key={participant.id}
+                    variant="outline"
+                    className="w-full justify-start"
+                    onClick={() => transferHost(participant.id)}
+                    data-testid={`transfer-to-${participant.id}`}
+                  >
+                    <UserCircle className="w-4 h-4 mr-2" />
+                    {participant.name}
+                  </Button>
+                ))}
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
     </div>
   );

@@ -466,6 +466,62 @@ export async function registerRoutes(app: Express): Promise<Server> {
             console.log(`Host ${participantId} ${isLocked ? 'locked' : 'unlocked'} room ${roomId}`);
             break;
           }
+
+          case 'transfer-host': {
+            const { roomId, participantId, newHostId } = message;
+            
+            // Verify requester is current host and in the same room
+            const requester = await storage.getParticipant(participantId);
+            if (!requester || !requester.isHost || requester.roomId !== roomId) {
+              console.log(`Unauthorized transfer-host attempt by ${participantId}`);
+              ws.send(JSON.stringify({
+                type: 'error',
+                message: 'Only the host can transfer host role',
+              }));
+              break;
+            }
+            
+            // Verify new host exists, is approved, and is in the same room
+            const newHost = await storage.getParticipant(newHostId);
+            if (!newHost || newHost.approvalStatus !== 'approved' || newHost.roomId !== roomId) {
+              console.log(`Invalid transfer-host target: ${newHostId} (not in room or not approved)`);
+              ws.send(JSON.stringify({
+                type: 'error',
+                message: 'Cannot transfer host to this participant',
+              }));
+              break;
+            }
+            
+            // Prevent transferring to self
+            if (newHostId === participantId) {
+              console.log(`Host ${participantId} attempted to transfer to self`);
+              ws.send(JSON.stringify({
+                type: 'error',
+                message: 'Cannot transfer host role to yourself',
+              }));
+              break;
+            }
+            
+            // Update room hostId
+            await storage.updateRoom(roomId, { hostId: newHostId });
+            
+            // Update old host's isHost to false
+            await storage.updateParticipant(participantId, { isHost: false });
+            
+            // Update new host's isHost to true
+            await storage.updateParticipant(newHostId, { isHost: true });
+            
+            // Broadcast host-transferred to all participants
+            broadcastToRoom(roomId, '', {
+              type: 'host-transferred',
+              roomId,
+              newHostId,
+              newHostName: newHost.name,
+            });
+
+            console.log(`Host transferred from ${requester.name} to ${newHost.name} in room ${roomId}`);
+            break;
+          }
         }
       } catch (error) {
         console.error('Error handling WebSocket message:', error);
