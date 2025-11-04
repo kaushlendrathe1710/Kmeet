@@ -11,6 +11,7 @@ import { RecordingControls } from "@/components/recording-controls";
 import { WaitingRoom } from "@/components/waiting-room";
 import { JoinRequestsPanel } from "@/components/join-requests-panel";
 import { EmojiReactionsContainer } from "@/components/emoji-reaction";
+import { AudioWaveform } from "@/components/audio-waveform";
 import { useToast } from "@/hooks/use-toast";
 import { MediaProcessor } from "@/lib/media-processor";
 import {
@@ -1172,6 +1173,15 @@ export default function Room() {
                 participants={participants}
                 participantName={participantName}
               />
+
+              {isRecording && (
+                <AudioWaveform
+                  stream={processedStream || localStream}
+                  width={200}
+                  height={40}
+                  className="mx-2"
+                />
+              )}
 
               <div className="w-px h-8 bg-border mx-2" />
 

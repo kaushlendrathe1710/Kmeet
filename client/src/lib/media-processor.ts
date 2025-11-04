@@ -3,8 +3,10 @@ export class MediaProcessor {
   private sourceNode: MediaStreamAudioSourceNode | null = null;
   private gainNode: GainNode | null = null;
   private compressorNode: DynamicsCompressorNode | null = null;
-  private deEsserNode: BiquadFilterNode | null = null;
+  private deEsserLowPass: BiquadFilterNode | null = null;
+  private deEsserHighPass: BiquadFilterNode | null = null;
   private deEsserCompressor: DynamicsCompressorNode | null = null;
+  private deEsserMerge: GainNode | null = null;
   private limiterNode: DynamicsCompressorNode | null = null;
   private destinationNode: MediaStreamAudioDestinationNode | null = null;
 
@@ -16,18 +18,25 @@ export class MediaProcessor {
       this.gainNode = this.audioContext.createGain();
       this.compressorNode = this.audioContext.createDynamicsCompressor();
       
-      this.deEsserNode = this.audioContext.createBiquadFilter();
-      this.deEsserNode.type = 'peaking';
-      this.deEsserNode.frequency.value = 7000;
-      this.deEsserNode.Q.value = 2.0;
-      this.deEsserNode.gain.value = -6.0;
+      this.deEsserLowPass = this.audioContext.createBiquadFilter();
+      this.deEsserLowPass.type = 'lowpass';
+      this.deEsserLowPass.frequency.value = 5000;
+      this.deEsserLowPass.Q.value = 0.7;
+      
+      this.deEsserHighPass = this.audioContext.createBiquadFilter();
+      this.deEsserHighPass.type = 'highpass';
+      this.deEsserHighPass.frequency.value = 5000;
+      this.deEsserHighPass.Q.value = 0.7;
       
       this.deEsserCompressor = this.audioContext.createDynamicsCompressor();
-      this.deEsserCompressor.threshold.value = -40;
-      this.deEsserCompressor.knee.value = 10;
-      this.deEsserCompressor.ratio.value = 8;
+      this.deEsserCompressor.threshold.value = -30;
+      this.deEsserCompressor.knee.value = 5;
+      this.deEsserCompressor.ratio.value = 6;
       this.deEsserCompressor.attack.value = 0.001;
       this.deEsserCompressor.release.value = 0.05;
+      
+      this.deEsserMerge = this.audioContext.createGain();
+      this.deEsserMerge.gain.value = 1.0;
       
       this.limiterNode = this.audioContext.createDynamicsCompressor();
       this.destinationNode = this.audioContext.createMediaStreamDestination();
@@ -44,11 +53,18 @@ export class MediaProcessor {
       this.limiterNode.attack.value = 0.001;
       this.limiterNode.release.value = 0.01;
 
+      this.compressorNode.connect(this.deEsserLowPass);
+      this.compressorNode.connect(this.deEsserHighPass);
+      
+      this.deEsserLowPass.connect(this.deEsserMerge);
+      this.deEsserHighPass.connect(this.deEsserCompressor);
+      this.deEsserCompressor.connect(this.deEsserMerge);
+      
       this.sourceNode
         .connect(this.gainNode)
-        .connect(this.compressorNode)
-        .connect(this.deEsserNode)
-        .connect(this.deEsserCompressor)
+        .connect(this.compressorNode);
+      
+      this.deEsserMerge
         .connect(this.limiterNode)
         .connect(this.destinationNode);
 
@@ -88,11 +104,17 @@ export class MediaProcessor {
     if (this.compressorNode) {
       this.compressorNode.disconnect();
     }
-    if (this.deEsserNode) {
-      this.deEsserNode.disconnect();
+    if (this.deEsserLowPass) {
+      this.deEsserLowPass.disconnect();
+    }
+    if (this.deEsserHighPass) {
+      this.deEsserHighPass.disconnect();
     }
     if (this.deEsserCompressor) {
       this.deEsserCompressor.disconnect();
+    }
+    if (this.deEsserMerge) {
+      this.deEsserMerge.disconnect();
     }
     if (this.limiterNode) {
       this.limiterNode.disconnect();

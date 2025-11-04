@@ -5,6 +5,13 @@ import { Radio, Square, Download, Loader2, Music, Play, Pause } from "lucide-rea
 import { useToast } from "@/hooks/use-toast";
 import RecordRTC, { RecordRTCPromisesHandler } from "recordrtc";
 import type { Participant } from "@shared/schema";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 interface RecordingControlsProps {
   isRecording: boolean;
@@ -43,6 +50,7 @@ const RecordingControls = forwardRef(
     const [countdown, setCountdown] = useState<number | null>(null);
     const [trackCount, setTrackCount] = useState(0);
     const [isPaused, setIsPaused] = useState(false);
+    const [recordingFormat, setRecordingFormat] = useState<"webm" | "wav">("webm");
     const trackRecordingsRef = useRef<Map<string, TrackRecording>>(new Map());
     const completedTracksRef = useRef<CompletedTrack[]>([]);
     const countdownCancelledRef = useRef(false);
@@ -80,9 +88,12 @@ const RecordingControls = forwardRef(
           
           const remoteRecorder = new RecordRTCPromisesHandler(audioStream, {
             type: "audio",
-            mimeType: "audio/webm",
-            audioBitsPerSecond: 128000,
-            numberOfAudioChannels: 1,
+            mimeType: recordingFormat === "wav" ? "audio/wav" : "audio/webm",
+            ...(recordingFormat === "webm" && {
+              audioBitsPerSecond: 128000,
+            }),
+            numberOfAudioChannels: recordingFormat === "wav" ? 2 : 1,
+            sampleRate: 48000,
           });
 
           await remoteRecorder.startRecording();
@@ -183,9 +194,12 @@ const RecordingControls = forwardRef(
         const localAudioStream = new MediaStream([localAudioTrack]);
         const localRecorder = new RecordRTCPromisesHandler(localAudioStream, {
           type: "audio",
-          mimeType: "audio/webm",
-          audioBitsPerSecond: 128000,
-          numberOfAudioChannels: 1,
+          mimeType: recordingFormat === "wav" ? "audio/wav" : "audio/webm",
+          ...(recordingFormat === "webm" && {
+            audioBitsPerSecond: 128000,
+          }),
+          numberOfAudioChannels: recordingFormat === "wav" ? 2 : 1,
+          sampleRate: 48000,
         });
 
         await localRecorder.startRecording();
@@ -208,9 +222,12 @@ const RecordingControls = forwardRef(
             
             const remoteRecorder = new RecordRTCPromisesHandler(audioStream, {
               type: "audio",
-              mimeType: "audio/webm",
-              audioBitsPerSecond: 128000,
-              numberOfAudioChannels: 1,
+              mimeType: recordingFormat === "wav" ? "audio/wav" : "audio/webm",
+              ...(recordingFormat === "webm" && {
+                audioBitsPerSecond: 128000,
+              }),
+              numberOfAudioChannels: recordingFormat === "wav" ? 2 : 1,
+              sampleRate: 48000,
             });
 
             await remoteRecorder.startRecording();
@@ -240,7 +257,7 @@ const RecordingControls = forwardRef(
       
       toast({
         title: "Multi-Track Recording Started",
-        description: `Recording ${recordedTracks} separate audio track${recordedTracks > 1 ? 's' : ''} for professional editing.`,
+        description: `Recording ${recordedTracks} ${recordingFormat === "wav" ? "lossless WAV" : "compressed WebM"} track${recordedTracks > 1 ? 's' : ''}.`,
       });
     } catch (error) {
       console.error("Error starting recording:", error);
@@ -263,6 +280,8 @@ const RecordingControls = forwardRef(
       const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
       let downloadedTracks = 0;
 
+      const fileExtension = recordingFormat === "wav" ? "wav" : "webm";
+      
       // Download tracks from participants who left early
       for (const completedTrack of completedTracksRef.current) {
         try {
@@ -272,7 +291,7 @@ const RecordingControls = forwardRef(
           a.href = url;
           
           const cleanName = completedTrack.participantName.replace(/[^a-zA-Z0-9]/g, '-');
-          a.download = `${timestamp}_${cleanName}_audio.webm`;
+          a.download = `${timestamp}_${cleanName}_audio.${fileExtension}`;
           
           document.body.appendChild(a);
           a.click();
@@ -301,7 +320,7 @@ const RecordingControls = forwardRef(
           
           // Clean filename: remove special characters
           const cleanName = trackRecording.participantName.replace(/[^a-zA-Z0-9]/g, '-');
-          a.download = `${timestamp}_${cleanName}_audio.webm`;
+          a.download = `${timestamp}_${cleanName}_audio.${fileExtension}`;
           
           document.body.appendChild(a);
           a.click();
@@ -443,6 +462,17 @@ const RecordingControls = forwardRef(
 
   return (
     <div className="flex items-center gap-2">
+      {!isRecording && (
+        <Select value={recordingFormat} onValueChange={(value: "webm" | "wav") => setRecordingFormat(value)} disabled={isRecording || countdown !== null}>
+          <SelectTrigger className="w-32" data-testid="select-recording-format">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="webm">WebM</SelectItem>
+            <SelectItem value="wav">WAV</SelectItem>
+          </SelectContent>
+        </Select>
+      )}
       <Button
         size="icon"
         variant={isRecording ? "destructive" : "secondary"}
@@ -464,7 +494,7 @@ const RecordingControls = forwardRef(
       {isRecording && trackCount > 0 && (
         <div className="flex items-center gap-1 px-2 py-1 bg-destructive/10 rounded-md" data-testid="track-count-indicator">
           <Music className="w-4 h-4 text-destructive" />
-          <span className="text-sm font-medium text-destructive">{trackCount} tracks</span>
+          <span className="text-sm font-medium text-destructive">{trackCount} {recordingFormat.toUpperCase()} tracks</span>
         </div>
       )}
       {isRecording && (
