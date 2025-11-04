@@ -1,5 +1,5 @@
 import { useRef, useEffect, useState, useCallback } from "react";
-import { VideoOff, Mic, MicOff } from "lucide-react";
+import { VideoOff, Mic, MicOff, Pin, PinOff } from "lucide-react";
 import { applyVideoFilters } from "@/lib/media-processor";
 import type { Participant } from "@shared/schema";
 import type { VideoSettings } from "./settings-panel";
@@ -8,6 +8,7 @@ import { AudioLevelMeter } from "@/components/audio-level-meter";
 import { useActiveSpeaker, type ParticipantAudioLevel } from "@/hooks/use-active-speaker";
 import { useConnectionQuality } from "@/hooks/use-connection-quality";
 import { NetworkIndicator } from "@/components/network-indicator";
+import { Button } from "@/components/ui/button";
 
 export type ViewMode = "grid" | "speaker";
 
@@ -21,9 +22,11 @@ interface VideoGridProps {
   hideSelfView?: boolean;
   peers?: Map<string, any>;
   viewMode?: ViewMode;
+  pinnedParticipantId?: string | null;
+  onTogglePin?: (participantId: string) => void;
 }
 
-export function VideoGrid({ participants, localStream, screenStream, currentParticipantId, videoSettings, remoteStreams, hideSelfView = false, peers, viewMode = "grid" }: VideoGridProps) {
+export function VideoGrid({ participants, localStream, screenStream, currentParticipantId, videoSettings, remoteStreams, hideSelfView = false, peers, viewMode = "grid", pinnedParticipantId, onTogglePin }: VideoGridProps) {
   const [participantLevels, setParticipantLevels] = useState<ParticipantAudioLevel[]>([]);
   const activeSpeakerId = useActiveSpeaker(participantLevels);
 
@@ -31,13 +34,15 @@ export function VideoGrid({ participants, localStream, screenStream, currentPart
     ? participants.filter(p => p.id !== currentParticipantId)
     : participants;
   
-  // In speaker view, separate the active speaker from others
-  const speakerParticipant = viewMode === "speaker" && activeSpeakerId
-    ? visibleParticipants.find(p => p.id === activeSpeakerId)
+  // In speaker view, determine who to show in main area: pinned > screen share (handled separately) > active speaker
+  const speakerParticipant = viewMode === "speaker"
+    ? (pinnedParticipantId 
+        ? visibleParticipants.find(p => p.id === pinnedParticipantId)
+        : activeSpeakerId ? visibleParticipants.find(p => p.id === activeSpeakerId) : null)
     : null;
   
   const otherParticipants = viewMode === "speaker" && speakerParticipant
-    ? visibleParticipants.filter(p => p.id !== activeSpeakerId)
+    ? visibleParticipants.filter(p => p.id !== speakerParticipant.id)
     : visibleParticipants;
 
   const getGridClass = () => {
@@ -85,6 +90,8 @@ export function VideoGrid({ participants, localStream, screenStream, currentPart
         onAudioLevelChange={handleAudioLevelChange}
         peerConnection={peerConnection}
         size={size}
+        isPinned={participant.id === pinnedParticipantId}
+        onTogglePin={onTogglePin}
       />
     );
   };
@@ -154,9 +161,11 @@ interface VideoTileProps {
   onAudioLevelChange: (participantId: string, level: number) => void;
   peerConnection?: any;
   size?: "large" | "small";
+  isPinned?: boolean;
+  onTogglePin?: (participantId: string) => void;
 }
 
-function VideoTile({ participant, stream, isSelf, videoSettings, isActiveSpeaker, onAudioLevelChange, peerConnection, size }: VideoTileProps) {
+function VideoTile({ participant, stream, isSelf, videoSettings, isActiveSpeaker, onAudioLevelChange, peerConnection, size, isPinned = false, onTogglePin }: VideoTileProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const audioLevel = useAudioLevel(stream, participant.isAudioEnabled);
   const connectionStats = useConnectionQuality(peerConnection);
@@ -224,6 +233,26 @@ function VideoTile({ participant, stream, isSelf, videoSettings, isActiveSpeaker
           <div className="text-6xl font-bold text-white/90">
             {getInitials(participant.name)}
           </div>
+        </div>
+      )}
+
+      {/* Pin button - top right corner */}
+      {onTogglePin && !isSelf && (
+        <div className="absolute top-2 right-2">
+          <Button
+            size="icon"
+            variant={isPinned ? "default" : "secondary"}
+            className="h-8 w-8 rounded-full bg-black/60 backdrop-blur-sm hover:bg-black/80"
+            onClick={() => onTogglePin(participant.id)}
+            data-testid={`button-pin-${participant.id}`}
+            title={isPinned ? "Unpin participant" : "Pin participant"}
+          >
+            {isPinned ? (
+              <PinOff className="w-4 h-4" />
+            ) : (
+              <Pin className="w-4 h-4" />
+            )}
+          </Button>
         </div>
       )}
 

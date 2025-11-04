@@ -46,6 +46,7 @@ export default function Room() {
   const [recordingCountdown, setRecordingCountdown] = useState<number | null>(null);
   const [hideSelfView, setHideSelfView] = useState(false);
   const [viewMode, setViewMode] = useState<"grid" | "speaker">("grid");
+  const [pinnedParticipantId, setPinnedParticipantId] = useState<string | null>(null);
   const recordingControlsRef = useRef<{ toggleRecording: () => void; cancelCountdown: () => void } | null>(null);
   
   const [participants, setParticipants] = useState<Participant[]>([]);
@@ -749,6 +750,8 @@ export default function Room() {
               hideSelfView={hideSelfView}
               peers={peersRef.current}
               viewMode={viewMode}
+              pinnedParticipantId={pinnedParticipantId}
+              onTogglePin={(id) => setPinnedParticipantId(prev => prev === id ? null : id)}
             />
           </div>
 
