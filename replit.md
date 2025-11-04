@@ -14,6 +14,7 @@ Preferred communication style: Simple, everyday language.
 - `.env.example` - Environment variable configuration template
 - `FEATURES.md` - Comprehensive feature documentation (22 major features)
 - `API.md` - Complete API reference for HTTP and WebSocket endpoints
+- `MISSING_FEATURES.md` - Analysis of features needed to make this a perfect podcast/meeting platform
 - `replit.md` - Technical architecture and system overview (this file)
 
 ## System Architecture
