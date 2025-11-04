@@ -62,6 +62,7 @@ export default function Room() {
   const [isPiPActive, setIsPiPActive] = useState(false);
   const [gridColumns, setGridColumns] = useState<2 | 3 | 4>(3);
   const [chapterMarkers, setChapterMarkers] = useState<Array<{ timestamp: number; label: string }>>([]);
+  const [showNotes, setShowNotes] = useState<Array<{ timestamp: number; note: string }>>([]);
   const [isReconnecting, setIsReconnecting] = useState(false);
   const reconnectAttemptsRef = useRef(0);
   const reconnectTimeoutRef = useRef<number | null>(null);
@@ -947,6 +948,19 @@ export default function Room() {
     });
   };
 
+  const addShowNote = (noteText: string) => {
+    const elapsedMs = recordingStartTimeRef.current 
+      ? Date.now() - recordingStartTimeRef.current 
+      : 0;
+    
+    const note = {
+      timestamp: elapsedMs,
+      note: noteText,
+    };
+    
+    setShowNotes(prev => [...prev, note]);
+  };
+
   const cleanup = () => {
     localStream?.getTracks().forEach(track => track.stop());
     screenStream?.getTracks().forEach(track => track.stop());
@@ -1003,6 +1017,12 @@ export default function Room() {
           <span className="text-sm text-muted-foreground font-mono" data-testid="text-duration">
             {formatDuration(duration)}
           </span>
+          {isRecording && (
+            <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-destructive/10 border border-destructive">
+              <Radio className="h-3 w-3 text-destructive animate-pulse" />
+              <span className="text-xs font-medium text-destructive" data-testid="text-recording-indicator">REC</span>
+            </div>
+          )}
           <Button
             variant="outline"
             size="sm"
