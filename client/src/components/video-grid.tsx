@@ -1,5 +1,5 @@
 import { useRef, useEffect, useState, useCallback } from "react";
-import { VideoOff, Mic, MicOff, Pin, PinOff } from "lucide-react";
+import { VideoOff, Mic, MicOff, Pin, PinOff, AlertTriangle } from "lucide-react";
 import { applyVideoFilters } from "@/lib/media-processor";
 import type { Participant } from "@shared/schema";
 import type { VideoSettings } from "./settings-panel";
@@ -167,7 +167,7 @@ interface VideoTileProps {
 
 function VideoTile({ participant, stream, isSelf, videoSettings, isActiveSpeaker, onAudioLevelChange, peerConnection, size, isPinned = false, onTogglePin }: VideoTileProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
-  const audioLevel = useAudioLevel(stream, participant.isAudioEnabled);
+  const { level: audioLevel, isClipping } = useAudioLevel(stream, participant.isAudioEnabled);
   const connectionStats = useConnectionQuality(peerConnection);
 
   // Report audio level changes to parent
@@ -263,6 +263,15 @@ function VideoTile({ participant, stream, isSelf, videoSettings, isActiveSpeaker
               {participant.name} {isSelf && "(You)"}
             </span>
             {!isSelf && <NetworkIndicator quality={connectionStats.quality} />}
+            {isClipping && participant.isAudioEnabled && (
+              <div 
+                className="bg-destructive rounded-full p-1 animate-pulse" 
+                data-testid={`audio-clipping-${participant.id}`}
+                title="Audio clipping detected - reduce volume"
+              >
+                <AlertTriangle className="w-4 h-4 text-white" />
+              </div>
+            )}
           </div>
           
           {!participant.isAudioEnabled && (

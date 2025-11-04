@@ -30,16 +30,18 @@ function getSharedAudioContext(): AudioContext | null {
 
 /**
  * Hook to analyze audio level from a MediaStream
- * Returns a value between 0-100 representing current volume
+ * Returns audio level (0-100) and clipping status
  * Uses a shared AudioContext to avoid browser limits
  */
-export function useAudioLevel(stream: MediaStream | null, enabled: boolean = true): number {
+export function useAudioLevel(stream: MediaStream | null, enabled: boolean = true): { level: number; isClipping: boolean } {
   const [audioLevel, setAudioLevel] = useState(0);
+  const [isClipping, setIsClipping] = useState(false);
   const [hasAudioTrack, setHasAudioTrack] = useState(false);
   const analyserRef = useRef<AnalyserNode | null>(null);
   const sourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
   const animationFrameRef = useRef<number | null>(null);
   const dataArrayRef = useRef<Uint8Array | null>(null);
+  const timeDomainArrayRef = useRef<Uint8Array | null>(null);
 
   // Watch for audio tracks being added/removed asynchronously
   useEffect(() => {
@@ -85,7 +87,9 @@ export function useAudioLevel(stream: MediaStream | null, enabled: boolean = tru
         analyserRef.current = null;
       }
       dataArrayRef.current = null;
+      timeDomainArrayRef.current = null;
       setAudioLevel(0);
+      setIsClipping(false);
     };
 
     if (!stream || !enabled || !hasAudioTrack) {
@@ -116,15 +120,18 @@ export function useAudioLevel(stream: MediaStream | null, enabled: boolean = tru
 
       const bufferLength = analyser.frequencyBinCount;
       const dataArray = new Uint8Array(bufferLength);
+      const timeDomainArray = new Uint8Array(analyser.fftSize);
 
       sourceRef.current = source;
       analyserRef.current = analyser;
       dataArrayRef.current = dataArray;
+      timeDomainArrayRef.current = timeDomainArray;
 
       // Analyze audio levels continuously
       const updateLevel = () => {
-        if (!analyserRef.current || !dataArrayRef.current) return;
+        if (!analyserRef.current || !dataArrayRef.current || !timeDomainArrayRef.current) return;
 
+        // Get frequency data for volume level
         analyserRef.current.getByteFrequencyData(dataArrayRef.current);
 
         // Calculate average volume (0-255 range)
@@ -137,7 +144,27 @@ export function useAudioLevel(stream: MediaStream | null, enabled: boolean = tru
         // Convert to 0-100 scale and apply some boost for visibility
         const normalizedLevel = Math.min(100, (average / 255) * 100 * 1.5);
         
+        // Get time domain data for clipping detection
+        analyserRef.current.getByteTimeDomainData(timeDomainArrayRef.current);
+        
+        // Detect clipping: check if waveform hits near max/min values
+        // Time domain data is centered at 128, with range 0-255
+        // Clipping occurs when values consistently hit extremes (0-5 or 250-255)
+        const CLIPPING_THRESHOLD = 5; // How close to min/max constitutes clipping
+        let clippingSamples = 0;
+        for (let i = 0; i < timeDomainArrayRef.current.length; i++) {
+          const value = timeDomainArrayRef.current[i];
+          if (value <= CLIPPING_THRESHOLD || value >= (255 - CLIPPING_THRESHOLD)) {
+            clippingSamples++;
+          }
+        }
+        
+        // If more than 5% of samples are clipping, flag it
+        const clippingPercentage = (clippingSamples / timeDomainArrayRef.current.length) * 100;
+        const isCurrentlyClipping = clippingPercentage > 5;
+        
         setAudioLevel(normalizedLevel);
+        setIsClipping(isCurrentlyClipping);
         animationFrameRef.current = requestAnimationFrame(updateLevel);
       };
 
@@ -151,5 +178,5 @@ export function useAudioLevel(stream: MediaStream | null, enabled: boolean = tru
     return cleanup;
   }, [stream, enabled, hasAudioTrack]);
 
-  return audioLevel;
+  return { level: audioLevel, isClipping };
 }
