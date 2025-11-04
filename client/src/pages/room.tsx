@@ -241,9 +241,11 @@ export default function Room() {
           processedAudioTrack.stop();
           processedStream.removeTrack(processedAudioTrack);
         }
-        setProcessedStream(new MediaStream(processedStream.getTracks()));
       }
 
+      const newStream = new MediaStream(localStream?.getVideoTracks() || []);
+      setLocalStream(newStream);
+      setProcessedStream(newStream);
       setIsAudioEnabled(false);
       
       wsRef.current?.send(JSON.stringify({
@@ -273,19 +275,15 @@ export default function Room() {
         const audioTrack = audioStream.getAudioTracks()[0];
         console.log("✅ IMMEDIATELY STARTED new audio track:", audioTrack.id);
         
-        if (localStream) {
-          localStream.addTrack(audioTrack);
-        } else {
-          setLocalStream(new MediaStream([audioTrack]));
-        }
+        const videoTracks = localStream?.getVideoTracks() || [];
+        const newStream = new MediaStream([...videoTracks, audioTrack]);
+        setLocalStream(newStream);
 
         if (mediaProcessorRef.current) {
           mediaProcessorRef.current.cleanup();
         }
         mediaProcessorRef.current = new MediaProcessor();
-        const newProcessed = mediaProcessorRef.current.initializeAudioProcessing(
-          localStream || new MediaStream([audioTrack])
-        );
+        const newProcessed = mediaProcessorRef.current.initializeAudioProcessing(newStream);
         setProcessedStream(newProcessed);
 
         setIsAudioEnabled(true);
@@ -332,9 +330,11 @@ export default function Room() {
           processedVideoTrack.stop();
           processedStream.removeTrack(processedVideoTrack);
         }
-        setProcessedStream(new MediaStream(processedStream.getTracks()));
       }
 
+      const newStream = new MediaStream(localStream?.getAudioTracks() || []);
+      setLocalStream(newStream);
+      setProcessedStream(newStream);
       setIsVideoEnabled(false);
       
       wsRef.current?.send(JSON.stringify({
@@ -360,19 +360,16 @@ export default function Room() {
         const videoTrack = videoStream.getVideoTracks()[0];
         console.log("✅ IMMEDIATELY STARTED new video track:", videoTrack.id);
         
-        if (localStream) {
-          localStream.addTrack(videoTrack);
-        } else {
-          setLocalStream(new MediaStream([videoTrack]));
-        }
+        const audioTracks = localStream?.getAudioTracks() || [];
+        const newStream = new MediaStream([...audioTracks, videoTrack]);
+        setLocalStream(newStream);
 
         if (processedStream) {
-          const oldProcessedVideo = processedStream.getVideoTracks()[0];
-          if (oldProcessedVideo) {
-            processedStream.removeTrack(oldProcessedVideo);
-          }
-          processedStream.addTrack(videoTrack);
-          setProcessedStream(new MediaStream(processedStream.getTracks()));
+          const processedAudioTracks = processedStream.getAudioTracks();
+          const newProcessed = new MediaStream([...processedAudioTracks, videoTrack]);
+          setProcessedStream(newProcessed);
+        } else {
+          setProcessedStream(newStream);
         }
 
         setIsVideoEnabled(true);
