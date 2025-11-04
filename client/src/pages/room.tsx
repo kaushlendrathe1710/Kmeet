@@ -54,6 +54,7 @@ export default function Room() {
   const [hideSelfView, setHideSelfView] = useState(false);
   const [viewMode, setViewMode] = useState<"grid" | "speaker">("grid");
   const [pinnedParticipantId, setPinnedParticipantId] = useState<string | null>(null);
+  const [spotlightedParticipantId, setSpotlightedParticipantId] = useState<string | null>(null);
   const [isRoomLocked, setIsRoomLocked] = useState(false);
   const [showTransferHost, setShowTransferHost] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -429,6 +430,21 @@ export default function Room() {
           title: "Host Transferred",
           description: `${message.newHostName} is now the host`,
         });
+        break;
+
+      case "participant-spotlighted":
+        setSpotlightedParticipantId(message.spotlightedParticipantId);
+        if (message.spotlightedParticipantId) {
+          toast({
+            title: "Participant Spotlighted",
+            description: `${message.spotlightedParticipantName} is now in the spotlight`,
+          });
+        } else {
+          toast({
+            title: "Spotlight Cleared",
+            description: "No participant is spotlighted",
+          });
+        }
         break;
     }
   };
@@ -858,6 +874,17 @@ export default function Room() {
               viewMode={viewMode}
               pinnedParticipantId={pinnedParticipantId}
               onTogglePin={(id) => setPinnedParticipantId(prev => prev === id ? null : id)}
+              spotlightedParticipantId={spotlightedParticipantId}
+              onToggleSpotlight={(id) => {
+                if (!isHost) return;
+                wsRef.current?.send(JSON.stringify({
+                  type: "spotlight-participant",
+                  roomId,
+                  participantId,
+                  targetParticipantId: spotlightedParticipantId === id ? null : id,
+                }));
+              }}
+              isHost={isHost}
             />
           </div>
 

@@ -25,6 +25,7 @@ export const roomSchema = z.object({
   hostId: z.string().optional(),
   participants: z.array(z.string()).default([]),
   isLocked: z.boolean().default(false),
+  spotlightedParticipantId: z.string().nullable().default(null),
 });
 
 export type Room = z.infer<typeof roomSchema>;
@@ -170,6 +171,18 @@ export const wsMessageSchema = z.discriminatedUnion("type", [
     roomId: z.string(),
     newHostId: z.string(),
     newHostName: z.string(),
+  }),
+  z.object({
+    type: z.literal("spotlight-participant"),
+    roomId: z.string(),
+    participantId: z.string(),
+    targetParticipantId: z.string().nullable(),
+  }),
+  z.object({
+    type: z.literal("participant-spotlighted"),
+    roomId: z.string(),
+    spotlightedParticipantId: z.string().nullable(),
+    spotlightedParticipantName: z.string().nullable(),
   }),
 ]);
 

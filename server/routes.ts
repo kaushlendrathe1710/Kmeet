@@ -139,6 +139,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             await storage.updateParticipant(targetParticipantId, { approvalStatus: "approved" });
 
             const participants = await storage.getParticipants(roomId);
+            const room = await storage.getRoom(roomId);
             
             const targetClient = clients.get(targetParticipantId);
             if (targetClient) {
@@ -146,6 +147,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 type: 'approval-granted',
                 participants,
               }));
+              
+              // Sync current room state to newly approved participant
+              if (room) {
+                // Sync lock status
+                if (room.isLocked) {
+                  targetClient.send(JSON.stringify({
+                    type: 'room-locked',
+                    roomId,
+                    isLocked: true,
+                  }));
+                }
+                
+                // Sync spotlight status
+                if (room.spotlightedParticipantId) {
+                  const spotlightedParticipant = await storage.getParticipant(room.spotlightedParticipantId);
+                  targetClient.send(JSON.stringify({
+                    type: 'participant-spotlighted',
+                    roomId,
+                    spotlightedParticipantId: room.spotlightedParticipantId,
+                    spotlightedParticipantName: spotlightedParticipant?.name || null,
+                  }));
+                }
+              }
             }
 
             broadcastToRoom(roomId, '', {
@@ -520,6 +544,50 @@ export async function registerRoutes(app: Express): Promise<Server> {
             });
 
             console.log(`Host transferred from ${requester.name} to ${newHost.name} in room ${roomId}`);
+            break;
+          }
+
+          case 'spotlight-participant': {
+            const { roomId, participantId, targetParticipantId } = message;
+            
+            // Verify requester is host
+            const requester = await storage.getParticipant(participantId);
+            if (!requester || !requester.isHost) {
+              console.log(`Unauthorized spotlight attempt by ${participantId}`);
+              ws.send(JSON.stringify({
+                type: 'error',
+                message: 'Only the host can spotlight participants',
+              }));
+              break;
+            }
+            
+            // If clearing spotlight (null), verify it
+            let targetName: string | null = null;
+            if (targetParticipantId) {
+              const target = await storage.getParticipant(targetParticipantId);
+              if (!target || target.roomId !== roomId) {
+                console.log(`Invalid spotlight target: ${targetParticipantId}`);
+                ws.send(JSON.stringify({
+                  type: 'error',
+                  message: 'Cannot spotlight this participant',
+                }));
+                break;
+              }
+              targetName = target.name;
+            }
+            
+            // Update room spotlightedParticipantId
+            await storage.updateRoom(roomId, { spotlightedParticipantId: targetParticipantId });
+            
+            // Broadcast to all participants
+            broadcastToRoom(roomId, '', {
+              type: 'participant-spotlighted',
+              roomId,
+              spotlightedParticipantId: targetParticipantId,
+              spotlightedParticipantName: targetName,
+            });
+
+            console.log(`Host ${participantId} ${targetParticipantId ? `spotlighted ${targetName}` : 'cleared spotlight'} in room ${roomId}`);
             break;
           }
         }

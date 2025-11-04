@@ -1,5 +1,5 @@
 import { useRef, useEffect, useState, useCallback } from "react";
-import { VideoOff, Mic, MicOff, Pin, PinOff, AlertTriangle } from "lucide-react";
+import { VideoOff, Mic, MicOff, Pin, PinOff, AlertTriangle, Zap } from "lucide-react";
 import { applyVideoFilters } from "@/lib/media-processor";
 import type { Participant } from "@shared/schema";
 import type { VideoSettings } from "./settings-panel";
@@ -24,9 +24,12 @@ interface VideoGridProps {
   viewMode?: ViewMode;
   pinnedParticipantId?: string | null;
   onTogglePin?: (participantId: string) => void;
+  spotlightedParticipantId?: string | null;
+  onToggleSpotlight?: (participantId: string) => void;
+  isHost?: boolean;
 }
 
-export function VideoGrid({ participants, localStream, screenStream, currentParticipantId, videoSettings, remoteStreams, hideSelfView = false, peers, viewMode = "grid", pinnedParticipantId, onTogglePin }: VideoGridProps) {
+export function VideoGrid({ participants, localStream, screenStream, currentParticipantId, videoSettings, remoteStreams, hideSelfView = false, peers, viewMode = "grid", pinnedParticipantId, onTogglePin, spotlightedParticipantId, onToggleSpotlight, isHost = false }: VideoGridProps) {
   const [participantLevels, setParticipantLevels] = useState<ParticipantAudioLevel[]>([]);
   const activeSpeakerId = useActiveSpeaker(participantLevels);
 
@@ -92,6 +95,9 @@ export function VideoGrid({ participants, localStream, screenStream, currentPart
         size={size}
         isPinned={participant.id === pinnedParticipantId}
         onTogglePin={onTogglePin}
+        isSpotlighted={participant.id === spotlightedParticipantId}
+        onToggleSpotlight={onToggleSpotlight}
+        isHost={isHost}
       />
     );
   };
@@ -163,9 +169,12 @@ interface VideoTileProps {
   size?: "large" | "small";
   isPinned?: boolean;
   onTogglePin?: (participantId: string) => void;
+  isSpotlighted?: boolean;
+  onToggleSpotlight?: (participantId: string) => void;
+  isHost?: boolean;
 }
 
-function VideoTile({ participant, stream, isSelf, videoSettings, isActiveSpeaker, onAudioLevelChange, peerConnection, size, isPinned = false, onTogglePin }: VideoTileProps) {
+function VideoTile({ participant, stream, isSelf, videoSettings, isActiveSpeaker, onAudioLevelChange, peerConnection, size, isPinned = false, onTogglePin, isSpotlighted = false, onToggleSpotlight, isHost = false }: VideoTileProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const { level: audioLevel, isClipping } = useAudioLevel(stream, participant.isAudioEnabled);
   const connectionStats = useConnectionQuality(peerConnection);
@@ -209,7 +218,9 @@ function VideoTile({ participant, stream, isSelf, videoSettings, isActiveSpeaker
   return (
     <div 
       className={`relative aspect-video bg-muted rounded-lg overflow-hidden border ${
-        isActiveSpeaker 
+        isSpotlighted
+          ? "border-4 border-yellow-500 shadow-2xl shadow-yellow-500/70 ring-2 ring-yellow-400" 
+          : isActiveSpeaker 
           ? "border-2 border-primary shadow-lg shadow-primary/50" 
           : "border border-border"
       } hover-elevate transition-all`}
@@ -236,23 +247,37 @@ function VideoTile({ participant, stream, isSelf, videoSettings, isActiveSpeaker
         </div>
       )}
 
-      {/* Pin button - top right corner */}
-      {onTogglePin && !isSelf && (
-        <div className="absolute top-2 right-2">
-          <Button
-            size="icon"
-            variant={isPinned ? "default" : "secondary"}
-            className="h-8 w-8 rounded-full bg-black/60 backdrop-blur-sm hover:bg-black/80"
-            onClick={() => onTogglePin(participant.id)}
-            data-testid={`button-pin-${participant.id}`}
-            title={isPinned ? "Unpin participant" : "Pin participant"}
-          >
-            {isPinned ? (
-              <PinOff className="w-4 h-4" />
-            ) : (
-              <Pin className="w-4 h-4" />
-            )}
-          </Button>
+      {/* Pin and Spotlight buttons - top right corner */}
+      {(onTogglePin || (onToggleSpotlight && isHost)) && !isSelf && (
+        <div className="absolute top-2 right-2 flex gap-2">
+          {onTogglePin && (
+            <Button
+              size="icon"
+              variant={isPinned ? "default" : "secondary"}
+              className="h-8 w-8 rounded-full bg-black/60 backdrop-blur-sm hover:bg-black/80"
+              onClick={() => onTogglePin(participant.id)}
+              data-testid={`button-pin-${participant.id}`}
+              title={isPinned ? "Unpin participant" : "Pin participant"}
+            >
+              {isPinned ? (
+                <PinOff className="w-4 h-4" />
+              ) : (
+                <Pin className="w-4 h-4" />
+              )}
+            </Button>
+          )}
+          {onToggleSpotlight && isHost && (
+            <Button
+              size="icon"
+              variant={isSpotlighted ? "default" : "secondary"}
+              className={`h-8 w-8 rounded-full bg-black/60 backdrop-blur-sm hover:bg-black/80 ${isSpotlighted ? 'ring-2 ring-yellow-500' : ''}`}
+              onClick={() => onToggleSpotlight(participant.id)}
+              data-testid={`button-spotlight-${participant.id}`}
+              title={isSpotlighted ? "Remove spotlight" : "Spotlight this participant"}
+            >
+              <Zap className={`w-4 h-4 ${isSpotlighted ? 'text-yellow-500' : ''}`} />
+            </Button>
+          )}
         </div>
       )}
 
