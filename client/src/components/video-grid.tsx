@@ -1,10 +1,11 @@
-import { useRef, useEffect } from "react";
+import { useRef, useEffect, useState, useCallback } from "react";
 import { VideoOff, Mic, MicOff } from "lucide-react";
 import { applyVideoFilters } from "@/lib/media-processor";
 import type { Participant } from "@shared/schema";
 import type { VideoSettings } from "./settings-panel";
 import { useAudioLevel } from "@/hooks/use-audio-level";
 import { AudioLevelMeter } from "@/components/audio-level-meter";
+import { useActiveSpeaker, type ParticipantAudioLevel } from "@/hooks/use-active-speaker";
 
 interface VideoGridProps {
   participants: Participant[];
@@ -17,6 +18,9 @@ interface VideoGridProps {
 }
 
 export function VideoGrid({ participants, localStream, screenStream, currentParticipantId, videoSettings, remoteStreams, hideSelfView = false }: VideoGridProps) {
+  const [participantLevels, setParticipantLevels] = useState<ParticipantAudioLevel[]>([]);
+  const activeSpeakerId = useActiveSpeaker(participantLevels);
+
   const visibleParticipants = hideSelfView 
     ? participants.filter(p => p.id !== currentParticipantId)
     : participants;
@@ -32,6 +36,20 @@ export function VideoGrid({ participants, localStream, screenStream, currentPart
     return "grid-cols-4";
   };
 
+  const handleAudioLevelChange = useCallback((participantId: string, level: number) => {
+    setParticipantLevels(prev => {
+      const existing = prev.find(p => p.participantId === participantId);
+      // Only update if level actually changed
+      if (existing && existing.level === level) {
+        return prev;
+      }
+      if (existing) {
+        return prev.map(p => p.participantId === participantId ? { participantId, level } : p);
+      }
+      return [...prev, { participantId, level }];
+    });
+  }, []);
+
   return (
     <div className={`grid ${getGridClass()} gap-4 h-full w-full`} data-testid="video-grid">
       {screenStream && (
@@ -39,6 +57,8 @@ export function VideoGrid({ participants, localStream, screenStream, currentPart
           participant={{ id: "screen", name: "Screen Share", roomId: "", isAudioEnabled: false, isVideoEnabled: true, isScreenSharing: true, isHost: false, approvalStatus: "approved", handRaised: false, joinedAt: Date.now() }}
           stream={screenStream}
           isSelf={false}
+          isActiveSpeaker={false}
+          onAudioLevelChange={handleAudioLevelChange}
         />
       )}
       
@@ -54,6 +74,8 @@ export function VideoGrid({ participants, localStream, screenStream, currentPart
             stream={stream}
             isSelf={participant.id === currentParticipantId}
             videoSettings={participant.id === currentParticipantId ? videoSettings : undefined}
+            isActiveSpeaker={participant.id === activeSpeakerId}
+            onAudioLevelChange={handleAudioLevelChange}
           />
         );
       })}
@@ -66,11 +88,18 @@ interface VideoTileProps {
   stream: MediaStream | null;
   isSelf: boolean;
   videoSettings?: VideoSettings;
+  isActiveSpeaker: boolean;
+  onAudioLevelChange: (participantId: string, level: number) => void;
 }
 
-function VideoTile({ participant, stream, isSelf, videoSettings }: VideoTileProps) {
+function VideoTile({ participant, stream, isSelf, videoSettings, isActiveSpeaker, onAudioLevelChange }: VideoTileProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const audioLevel = useAudioLevel(stream, participant.isAudioEnabled);
+
+  // Report audio level changes to parent
+  useEffect(() => {
+    onAudioLevelChange(participant.id, audioLevel);
+  }, [audioLevel, participant.id, onAudioLevelChange]);
 
   useEffect(() => {
     if (videoRef.current && stream) {
@@ -105,7 +134,11 @@ function VideoTile({ participant, stream, isSelf, videoSettings }: VideoTileProp
 
   return (
     <div 
-      className="relative aspect-video bg-muted rounded-lg overflow-hidden border border-border hover-elevate transition-all"
+      className={`relative aspect-video bg-muted rounded-lg overflow-hidden border ${
+        isActiveSpeaker 
+          ? "border-2 border-primary shadow-lg shadow-primary/50" 
+          : "border border-border"
+      } hover-elevate transition-all`}
       data-testid={`video-tile-${participant.id}`}
     >
       {participant.isVideoEnabled && stream ? (
