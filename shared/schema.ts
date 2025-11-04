@@ -38,6 +38,7 @@ export const participantSchema = z.object({
   isScreenSharing: z.boolean().default(false),
   isHost: z.boolean().default(false),
   approvalStatus: z.enum(["pending", "approved", "denied"]).default("pending"),
+  handRaised: z.boolean().default(false),
   joinedAt: z.number(),
 });
 
@@ -121,6 +122,18 @@ export const wsMessageSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("participant-denied"),
     participantId: z.string(),
+  }),
+  z.object({
+    type: z.literal("remove-participant"),
+    roomId: z.string(),
+    participantId: z.string(),
+    targetParticipantId: z.string(),
+  }),
+  z.object({
+    type: z.literal("raise-hand"),
+    roomId: z.string(),
+    participantId: z.string(),
+    isRaised: z.boolean(),
   }),
 ]);
 

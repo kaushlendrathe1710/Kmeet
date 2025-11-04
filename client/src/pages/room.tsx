@@ -75,6 +75,51 @@ export default function Room() {
     };
   }, [roomId]);
 
+  useEffect(() => {
+    const handleKeyPress = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
+        return;
+      }
+
+      const key = e.key.toLowerCase();
+      
+      switch (key) {
+        case 'm':
+          toggleAudio();
+          break;
+        case 'v':
+          toggleVideo();
+          break;
+        case 's':
+          toggleScreenShare();
+          break;
+        case 'r':
+          if (isRecording) {
+            stopRecording();
+          } else {
+            startRecording();
+          }
+          break;
+        case 'c':
+          setShowChat(prev => !prev);
+          break;
+        case 'p':
+          setShowParticipants(prev => !prev);
+          break;
+        case 'f':
+          if (document.fullscreenElement) {
+            document.exitFullscreen();
+          } else {
+            document.documentElement.requestFullscreen();
+          }
+          break;
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyPress);
+    return () => window.removeEventListener('keydown', handleKeyPress);
+  }, [isRecording, isAudioEnabled, isVideoEnabled, isScreenSharing]);
+
   const initializeMedia = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
@@ -211,6 +256,15 @@ export default function Room() {
       case "participant-denied":
         setParticipants(prev => prev.filter(p => p.id !== message.participantId));
         break;
+
+      case "removed-from-room":
+        toast({
+          title: "Removed from Room",
+          description: message.message,
+          variant: "destructive",
+        });
+        setTimeout(() => setLocation("/"), 2000);
+        break;
       
       case "participant-left":
         setParticipants(prev => prev.filter(p => p.id !== message.participantId));
@@ -271,6 +325,19 @@ export default function Room() {
       participantId,
       targetParticipantId,
     }));
+  };
+
+  const removeParticipant = (targetParticipantId: string) => {
+    wsRef.current?.send(JSON.stringify({
+      type: "remove-participant",
+      roomId,
+      participantId,
+      targetParticipantId,
+    }));
+    toast({
+      title: "Participant Removed",
+      description: "The participant has been removed from the room",
+    });
   };
 
   const toggleAudio = async () => {
@@ -692,8 +759,11 @@ export default function Room() {
 
         {showParticipants && (
           <ParticipantsPanel
-            participants={participants}
+            participants={approvedParticipants}
+            currentParticipantId={participantId}
+            isHost={isHost}
             onClose={() => setShowParticipants(false)}
+            onRemoveParticipant={removeParticipant}
           />
         )}
 

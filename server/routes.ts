@@ -200,6 +200,79 @@ export async function registerRoutes(app: Express): Promise<Server> {
             break;
           }
 
+          case 'remove-participant': {
+            const { roomId, participantId, targetParticipantId } = message;
+            
+            const requestingParticipant = await storage.getParticipant(participantId);
+            if (!requestingParticipant) {
+              console.error(`Unknown participant ${participantId} tried to remove - rejected`);
+              ws.send(JSON.stringify({
+                type: 'error',
+                message: 'Participant not found',
+              }));
+              break;
+            }
+
+            if (requestingParticipant.roomId !== roomId) {
+              console.error(`Participant ${participantId} tried to remove in wrong room ${roomId} - rejected`);
+              ws.send(JSON.stringify({
+                type: 'error',
+                message: 'You are not in this room',
+              }));
+              break;
+            }
+
+            if (!requestingParticipant.isHost) {
+              console.error(`Non-host ${participantId} tried to remove participant - rejected`);
+              ws.send(JSON.stringify({
+                type: 'error',
+                message: 'Only the host can remove participants',
+              }));
+              break;
+            }
+
+            const targetParticipant = await storage.getParticipant(targetParticipantId);
+            if (!targetParticipant || targetParticipant.roomId !== roomId) {
+              console.error(`Target participant ${targetParticipantId} not in room ${roomId} - rejected`);
+              ws.send(JSON.stringify({
+                type: 'error',
+                message: 'Target participant not found in this room',
+              }));
+              break;
+            }
+
+            if (targetParticipant.isHost) {
+              console.error(`Participant ${participantId} tried to remove host - rejected`);
+              ws.send(JSON.stringify({
+                type: 'error',
+                message: 'Cannot remove the host',
+              }));
+              break;
+            }
+
+            await storage.removeParticipant(roomId, targetParticipantId);
+
+            const targetClient = clients.get(targetParticipantId);
+            if (targetClient) {
+              targetClient.send(JSON.stringify({
+                type: 'removed-from-room',
+                message: 'You have been removed from the room by the host',
+              }));
+              targetClient.close();
+            }
+
+            clients.delete(targetParticipantId);
+
+            broadcastToRoom(roomId, '', {
+              type: 'participant-left',
+              participantId: targetParticipantId,
+              participantName: targetParticipant.name,
+            });
+
+            console.log(`Host ${participantId} removed participant ${targetParticipantId} from room ${roomId}`);
+            break;
+          }
+
           case 'leave-room': {
             const { roomId, participantId } = message;
             
@@ -300,6 +373,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
             });
 
             console.log(`Participant ${participantId} ${isSharing ? 'started' : 'stopped'} screen sharing`);
+            break;
+          }
+
+          case 'raise-hand': {
+            const { roomId, participantId, isRaised } = message;
+            
+            await storage.updateParticipant(participantId, { handRaised: isRaised });
+
+            broadcastToRoom(roomId, '', {
+              type: 'hand-raised',
+              participantId,
+              isRaised,
+            });
+
+            console.log(`Participant ${participantId} ${isRaised ? 'raised' : 'lowered'} hand in room ${roomId}`);
             break;
           }
         }

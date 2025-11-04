@@ -1,14 +1,17 @@
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { X, Mic, MicOff, Video, VideoOff } from "lucide-react";
+import { X, Mic, MicOff, Video, VideoOff, UserX } from "lucide-react";
 import type { Participant } from "@shared/schema";
 
 interface ParticipantsPanelProps {
   participants: Participant[];
+  currentParticipantId: string;
+  isHost: boolean;
   onClose: () => void;
+  onRemoveParticipant?: (participantId: string) => void;
 }
 
-export function ParticipantsPanel({ participants, onClose }: ParticipantsPanelProps) {
+export function ParticipantsPanel({ participants, currentParticipantId, isHost, onClose, onRemoveParticipant }: ParticipantsPanelProps) {
   const getInitials = (name: string) => {
     return name
       .split(" ")
@@ -50,8 +53,11 @@ export function ParticipantsPanel({ participants, onClose }: ParticipantsPanelPr
               </div>
 
               <div className="flex-1 min-w-0">
-                <div className="font-medium truncate" data-testid={`participant-name-list-${participant.id}`}>
+                <div className="font-medium truncate flex items-center gap-2" data-testid={`participant-name-list-${participant.id}`}>
                   {participant.name}
+                  {participant.isHost && (
+                    <span className="text-xs bg-primary/10 text-primary px-1.5 py-0.5 rounded">Host</span>
+                  )}
                 </div>
                 <div className="text-xs text-muted-foreground flex items-center gap-2 mt-1">
                   {participant.isAudioEnabled ? (
@@ -66,6 +72,19 @@ export function ParticipantsPanel({ participants, onClose }: ParticipantsPanelPr
                   )}
                 </div>
               </div>
+
+              {isHost && participant.id !== currentParticipantId && !participant.isHost && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => onRemoveParticipant?.(participant.id)}
+                  className="gap-1 text-destructive hover:text-destructive"
+                  data-testid={`button-remove-${participant.id}`}
+                >
+                  <UserX className="w-3 h-3" />
+                  Remove
+                </Button>
+              )}
             </div>
           ))}
         </div>
