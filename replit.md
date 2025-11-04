@@ -8,6 +8,14 @@ PodcastMeet is a professional video conferencing platform specifically designed 
 
 Preferred communication style: Simple, everyday language.
 
+## Documentation
+
+**Project Documentation Files:**
+- `.env.example` - Environment variable configuration template
+- `FEATURES.md` - Comprehensive feature documentation (22 major features)
+- `API.md` - Complete API reference for HTTP and WebSocket endpoints
+- `replit.md` - Technical architecture and system overview (this file)
+
 ## System Architecture
 
 ### Frontend Architecture
