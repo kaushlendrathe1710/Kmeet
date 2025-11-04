@@ -27,9 +27,10 @@ interface VideoGridProps {
   spotlightedParticipantId?: string | null;
   onToggleSpotlight?: (participantId: string) => void;
   isHost?: boolean;
+  gridColumns?: 2 | 3 | 4;
 }
 
-export function VideoGrid({ participants, localStream, screenStream, currentParticipantId, videoSettings, remoteStreams, hideSelfView = false, peers, viewMode = "grid", pinnedParticipantId, onTogglePin, spotlightedParticipantId, onToggleSpotlight, isHost = false }: VideoGridProps) {
+export function VideoGrid({ participants, localStream, screenStream, currentParticipantId, videoSettings, remoteStreams, hideSelfView = false, peers, viewMode = "grid", pinnedParticipantId, onTogglePin, spotlightedParticipantId, onToggleSpotlight, isHost = false, gridColumns = 3 }: VideoGridProps) {
   const [participantLevels, setParticipantLevels] = useState<ParticipantAudioLevel[]>([]);
   const activeSpeakerId = useActiveSpeaker(participantLevels);
 
@@ -52,11 +53,10 @@ export function VideoGrid({ participants, localStream, screenStream, currentPart
     const count = visibleParticipants.length + (screenStream ? 1 : 0);
     
     if (count === 1) return "grid-cols-1";
-    if (count === 2) return "grid-cols-2";
-    if (count <= 4) return "grid-cols-2";
-    if (count <= 6) return "grid-cols-3";
-    if (count <= 9) return "grid-cols-3";
-    return "grid-cols-4";
+    if (gridColumns === 2) return "grid-cols-2";
+    if (gridColumns === 3) return "grid-cols-3";
+    if (gridColumns === 4) return "grid-cols-4";
+    return `grid-cols-${gridColumns}`;
   };
 
   const handleAudioLevelChange = useCallback((participantId: string, level: number) => {
@@ -108,7 +108,7 @@ export function VideoGrid({ participants, localStream, screenStream, currentPart
       <div className={`grid ${getGridClass()} gap-4 h-full w-full`} data-testid="video-grid">
         {screenStream && (
           <VideoTile
-            participant={{ id: "screen", name: "Screen Share", roomId: "", isAudioEnabled: false, isVideoEnabled: true, isScreenSharing: true, isHost: false, approvalStatus: "approved", handRaised: false, joinedAt: Date.now() }}
+            participant={{ id: "screen", name: "Screen Share", roomId: "", isAudioEnabled: false, isVideoEnabled: true, isScreenSharing: true, isHost: false, approvalStatus: "approved", handRaised: false, canRecord: false, joinedAt: Date.now() }}
             stream={screenStream}
             isSelf={false}
             isActiveSpeaker={false}
@@ -128,7 +128,7 @@ export function VideoGrid({ participants, localStream, screenStream, currentPart
       <div className="flex-1 min-h-0">
         {screenStream ? (
           <VideoTile
-            participant={{ id: "screen", name: "Screen Share", roomId: "", isAudioEnabled: false, isVideoEnabled: true, isScreenSharing: true, isHost: false, approvalStatus: "approved", handRaised: false, joinedAt: Date.now() }}
+            participant={{ id: "screen", name: "Screen Share", roomId: "", isAudioEnabled: false, isVideoEnabled: true, isScreenSharing: true, isHost: false, approvalStatus: "approved", handRaised: false, canRecord: false, joinedAt: Date.now() }}
             stream={screenStream}
             isSelf={false}
             isActiveSpeaker={false}

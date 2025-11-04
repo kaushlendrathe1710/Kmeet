@@ -59,8 +59,15 @@ export default function Room() {
   const [isRoomLocked, setIsRoomLocked] = useState(false);
   const [showTransferHost, setShowTransferHost] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [isPiPActive, setIsPiPActive] = useState(false);
+  const [gridColumns, setGridColumns] = useState<2 | 3 | 4>(3);
+  const [chapterMarkers, setChapterMarkers] = useState<Array<{ timestamp: number; label: string }>>([]);
+  const [isReconnecting, setIsReconnecting] = useState(false);
+  const reconnectAttemptsRef = useRef(0);
+  const reconnectTimeoutRef = useRef<number | null>(null);
   const recordingControlsRef = useRef<{ toggleRecording: () => void; cancelCountdown: () => void; pauseRecording: () => void; resumeRecording: () => void } | null>(null);
   const roomContainerRef = useRef<HTMLDivElement | null>(null);
+  const videoElementRef = useRef<HTMLVideoElement | null>(null);
   
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -167,6 +174,12 @@ export default function Room() {
         case 'f':
           toggleFullscreen();
           break;
+        case 'i':
+          togglePictureInPicture();
+          break;
+        case 'k':
+          addChapterMarker();
+          break;
       }
     };
 
@@ -204,6 +217,19 @@ export default function Room() {
     return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
   }, []);
 
+  useEffect(() => {
+    const handlePiPChange = () => {
+      setIsPiPActive(!!document.pictureInPictureElement);
+    };
+
+    document.addEventListener('enterpictureinpicture', handlePiPChange, true);
+    document.addEventListener('leavepictureinpicture', handlePiPChange, true);
+    return () => {
+      document.removeEventListener('enterpictureinpicture', handlePiPChange, true);
+      document.removeEventListener('leavepictureinpicture', handlePiPChange, true);
+    };
+  }, []);
+
   const initializeMedia = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
@@ -231,6 +257,7 @@ export default function Room() {
         isHost: false,
         approvalStatus: "pending",
         handRaised: false,
+        canRecord: false,
         joinedAt: Date.now(),
       };
       
@@ -854,6 +881,72 @@ export default function Room() {
     }
   };
 
+  const togglePictureInPicture = async () => {
+    const videoElements = document.querySelectorAll('video');
+    const activeVideo = Array.from(videoElements).find(v => v.srcObject && v.readyState >= 2);
+    
+    if (!activeVideo) {
+      toast({
+        title: "Picture-in-Picture Unavailable",
+        description: "No active video to display",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      if (document.pictureInPictureElement) {
+        await document.exitPictureInPicture();
+      } else {
+        await activeVideo.requestPictureInPicture();
+      }
+    } catch (error) {
+      console.error("PiP error:", error);
+      toast({
+        title: "Picture-in-Picture Error",
+        description: "Could not activate Picture-in-Picture mode",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const recordingStartTimeRef = useRef<number | null>(null);
+  
+  useEffect(() => {
+    if (isRecording && !recordingStartTimeRef.current) {
+      recordingStartTimeRef.current = Date.now();
+    } else if (!isRecording) {
+      recordingStartTimeRef.current = null;
+    }
+  }, [isRecording]);
+
+  const addChapterMarker = () => {
+    if (!isRecording) {
+      toast({
+        title: "Not Recording",
+        description: "Chapter markers can only be added during recording",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const elapsedMs = recordingStartTimeRef.current 
+      ? Date.now() - recordingStartTimeRef.current 
+      : 0;
+    
+    const marker = {
+      timestamp: elapsedMs,
+      label: `Chapter ${chapterMarkers.length + 1}`,
+    };
+    
+    setChapterMarkers(prev => [...prev, marker]);
+    
+    toast({
+      title: "Chapter Marker Added",
+      description: `Marker at ${(elapsedMs / 1000).toFixed(1)}s`,
+    });
+  };
+
   const cleanup = () => {
     localStream?.getTracks().forEach(track => track.stop());
     screenStream?.getTracks().forEach(track => track.stop());
@@ -951,6 +1044,7 @@ export default function Room() {
               pinnedParticipantId={pinnedParticipantId}
               onTogglePin={(id) => setPinnedParticipantId(prev => prev === id ? null : id)}
               spotlightedParticipantId={spotlightedParticipantId}
+              gridColumns={gridColumns}
               onToggleSpotlight={(id) => {
                 if (!isHost) return;
                 wsRef.current?.send(JSON.stringify({

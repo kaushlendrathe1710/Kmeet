@@ -8,6 +8,7 @@ import type { Participant } from "@shared/schema";
 
 interface RecordingControlsProps {
   isRecording: boolean;
+  canRecord?: boolean;
   onToggleRecording: () => void;
   localStream: MediaStream | null;
   onCountdownChange?: (countdown: number | null) => void;
