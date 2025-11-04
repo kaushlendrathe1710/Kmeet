@@ -3,6 +3,8 @@ import { VideoOff, Mic, MicOff } from "lucide-react";
 import { applyVideoFilters } from "@/lib/media-processor";
 import type { Participant } from "@shared/schema";
 import type { VideoSettings } from "./settings-panel";
+import { useAudioLevel } from "@/hooks/use-audio-level";
+import { AudioLevelMeter } from "@/components/audio-level-meter";
 
 interface VideoGridProps {
   participants: Participant[];
@@ -34,7 +36,7 @@ export function VideoGrid({ participants, localStream, screenStream, currentPart
     <div className={`grid ${getGridClass()} gap-4 h-full w-full`} data-testid="video-grid">
       {screenStream && (
         <VideoTile
-          participant={{ id: "screen", name: "Screen Share", roomId: "", isAudioEnabled: false, isVideoEnabled: true, isScreenSharing: true, joinedAt: Date.now() }}
+          participant={{ id: "screen", name: "Screen Share", roomId: "", isAudioEnabled: false, isVideoEnabled: true, isScreenSharing: true, isHost: false, approvalStatus: "approved", handRaised: false, joinedAt: Date.now() }}
           stream={screenStream}
           isSelf={false}
         />
@@ -68,6 +70,7 @@ interface VideoTileProps {
 
 function VideoTile({ participant, stream, isSelf, videoSettings }: VideoTileProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
+  const audioLevel = useAudioLevel(stream, participant.isAudioEnabled);
 
   useEffect(() => {
     if (videoRef.current && stream) {
@@ -127,7 +130,7 @@ function VideoTile({ participant, stream, isSelf, videoSettings }: VideoTileProp
       )}
 
       <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 to-transparent p-4">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between mb-2">
           <span className="text-white text-sm font-medium" data-testid={`participant-name-${participant.id}`}>
             {participant.name} {isSelf && "(You)"}
           </span>
@@ -138,6 +141,10 @@ function VideoTile({ participant, stream, isSelf, videoSettings }: VideoTileProp
             </div>
           )}
         </div>
+        
+        {participant.isAudioEnabled && (
+          <AudioLevelMeter level={audioLevel} />
+        )}
       </div>
     </div>
   );
