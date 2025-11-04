@@ -129,13 +129,25 @@ export function applyVideoFilters(
   videoElement: HTMLVideoElement,
   brightness: number,
   contrast: number,
-  saturation: number
+  saturation: number,
+  smoothing: number = 0,
+  sharpness: number = 100
 ): void {
   const filters = [
     `brightness(${brightness}%)`,
     `contrast(${contrast}%)`,
     `saturate(${saturation}%)`,
   ];
+  
+  if (smoothing > 0) {
+    const blurAmount = smoothing * 0.03;
+    filters.push(`blur(${blurAmount}px)`);
+  }
+  
+  if (sharpness !== 100) {
+    const sharpnessContrast = 100 + (sharpness - 100) * 0.3;
+    filters.push(`contrast(${sharpnessContrast}%)`);
+  }
   
   videoElement.style.filter = filters.join(" ");
 }

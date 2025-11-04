@@ -196,7 +196,9 @@ function VideoTile({ participant, stream, isSelf, videoSettings, isActiveSpeaker
         videoRef.current,
         videoSettings.brightness,
         videoSettings.contrast,
-        videoSettings.saturation
+        videoSettings.saturation,
+        videoSettings.smoothing || 0,
+        videoSettings.sharpness || 100
       );
     }
   }, [videoSettings, isSelf]);

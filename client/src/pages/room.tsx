@@ -2,11 +2,12 @@ import { useState, useEffect, useRef } from "react";
 import { useRoute, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Mic, MicOff, Video, VideoOff, Monitor, MonitorOff, MessageSquare, Users, Settings, Phone, Radio, Copy, Check, UserPlus, Hand, Smile, Grid3x3, UserCircle, Lock, LockOpen, ArrowRightLeft, Maximize, Minimize } from "lucide-react";
+import { Mic, MicOff, Video, VideoOff, Monitor, MonitorOff, MessageSquare, Users, Settings, Phone, Radio, Copy, Check, UserPlus, Hand, Smile, Grid3x3, UserCircle, Lock, LockOpen, ArrowRightLeft, Maximize, Minimize, Wand2, FileUp } from "lucide-react";
 import { VideoGrid, type ViewMode } from "@/components/video-grid";
 import { ChatPanel } from "@/components/chat-panel";
 import { ParticipantsPanel } from "@/components/participants-panel";
 import { SettingsPanel, type AudioSettings, type VideoSettings } from "@/components/settings-panel";
+import { FileSharing } from "@/components/file-sharing";
 import { RecordingControls } from "@/components/recording-controls";
 import { WaitingRoom } from "@/components/waiting-room";
 import { JoinRequestsPanel } from "@/components/join-requests-panel";
@@ -17,6 +18,8 @@ import { QualitySelector } from "@/components/quality-selector";
 import { PresetSelector } from "@/components/preset-selector";
 import { useToast } from "@/hooks/use-toast";
 import { MediaProcessor } from "@/lib/media-processor";
+import { BackgroundProcessor, type BackgroundSettings } from "@/lib/background-processor";
+import { BackgroundControls } from "@/components/background-controls";
 import { useNetworkQuality } from "@/hooks/use-network-quality";
 import { useBandwidthAdaptation, VIDEO_QUALITY_CONSTRAINTS, type VideoQualityLevel } from "@/hooks/use-bandwidth-adaptation";
 import { QUALITY_PRESETS, type QualityPreset } from "@/lib/quality-presets";
@@ -74,6 +77,23 @@ export default function Room() {
   const [isReconnecting, setIsReconnecting] = useState(false);
   const [videoQuality, setVideoQuality] = useState<VideoQualityLevel>("auto");
   const [currentPreset, setCurrentPreset] = useState<QualityPreset>("interview");
+  const [showBackgroundControls, setShowBackgroundControls] = useState(false);
+  const [backgroundSettings, setBackgroundSettings] = useState<BackgroundSettings>({
+    mode: 'none',
+    blurAmount: 15,
+    backgroundImage: null,
+  });
+  const [isBackgroundProcessing, setIsBackgroundProcessing] = useState(false);
+  const [showFileSharing, setShowFileSharing] = useState(false);
+  const [sharedFiles, setSharedFiles] = useState<Array<{
+    id: string;
+    name: string;
+    size: number;
+    type: string;
+    uploadedBy: string;
+    timestamp: number;
+    data: string;
+  }>>([]);
   const reconnectAttemptsRef = useRef(0);
   const reconnectTimeoutRef = useRef<number | null>(null);
   const recordingControlsRef = useRef<{ toggleRecording: () => void; cancelCountdown: () => void; pauseRecording: () => void; resumeRecording: () => void } | null>(null);
@@ -92,11 +112,15 @@ export default function Room() {
   const [duration, setDuration] = useState(0);
   const startTimeRef = useRef<number>(Date.now());
   const mediaProcessorRef = useRef<MediaProcessor | null>(null);
+  const backgroundProcessorRef = useRef<BackgroundProcessor | null>(null);
   const [processedStream, setProcessedStream] = useState<MediaStream | null>(null);
+  const [backgroundProcessedStream, setBackgroundProcessedStream] = useState<MediaStream | null>(null);
   const [videoSettings, setVideoSettings] = useState<VideoSettings>({
     brightness: 100,
     contrast: 100,
     saturation: 100,
+    smoothing: 0,
+    sharpness: 100,
   });
 
   const networkStats = useNetworkQuality(primaryPeerConnection);
@@ -155,6 +179,28 @@ export default function Room() {
       clearSavedRoomState();
     };
   }, [roomId]);
+
+  useEffect(() => {
+    if (!backgroundProcessorRef.current || !processedStream) {
+      return;
+    }
+
+    const applyBackgroundProcessing = async () => {
+      if (backgroundSettings.mode === 'none') {
+        setBackgroundProcessedStream(null);
+        backgroundProcessorRef.current?.stopProcessing();
+        return;
+      }
+
+      backgroundProcessorRef.current.updateSettings(backgroundSettings);
+      const bgStream = await backgroundProcessorRef.current.startProcessing(processedStream);
+      if (bgStream) {
+        setBackgroundProcessedStream(bgStream);
+      }
+    };
+
+    applyBackgroundProcessing();
+  }, [backgroundSettings, processedStream]);
 
   // Push-to-talk state
   const pushToTalkActiveRef = useRef(false);
@@ -293,6 +339,12 @@ export default function Room() {
       
       setLocalStream(stream);
       setProcessedStream(enhanced);
+
+      backgroundProcessorRef.current = new BackgroundProcessor();
+      const initialized = await backgroundProcessorRef.current.initialize();
+      if (initialized) {
+        setIsBackgroundProcessing(true);
+      }
       
       const localParticipant: Participant = {
         id: participantId,
@@ -530,6 +582,10 @@ export default function Room() {
       case "emoji-reaction":
         const reactionId = `${message.participantId}-${Date.now()}`;
         setReactions(prev => [...prev, { id: reactionId, emoji: message.emoji }]);
+        break;
+      
+      case "file-share":
+        setSharedFiles(prev => [...prev, message.file]);
         break;
       
       case "mute-all-command":
@@ -1137,6 +1193,7 @@ export default function Room() {
     localStream?.getTracks().forEach(track => track.stop());
     screenStream?.getTracks().forEach(track => track.stop());
     processedStream?.getTracks().forEach(track => track.stop());
+    backgroundProcessedStream?.getTracks().forEach(track => track.stop());
     
     peersRef.current.forEach(peer => {
       peer.destroy();
@@ -1144,6 +1201,7 @@ export default function Room() {
     peersRef.current.clear();
     
     mediaProcessorRef.current?.cleanup();
+    backgroundProcessorRef.current?.cleanup();
     wsRef.current?.close();
   };
 
@@ -1239,7 +1297,7 @@ export default function Room() {
           <div className="flex-1 p-4 overflow-auto">
             <VideoGrid
               participants={approvedParticipants}
-              localStream={processedStream || localStream}
+              localStream={backgroundProcessedStream || processedStream || localStream}
               screenStream={screenStream}
               currentParticipantId={participantId}
               videoSettings={videoSettings}
@@ -1422,6 +1480,28 @@ export default function Room() {
                 <Settings className="w-5 h-5" />
               </Button>
 
+              <Button
+                size="icon"
+                variant={showBackgroundControls ? "default" : "secondary"}
+                onClick={() => setShowBackgroundControls(!showBackgroundControls)}
+                className="rounded-full w-12 h-12"
+                data-testid="button-toggle-background"
+                title="Background Effects"
+              >
+                <Wand2 className="w-5 h-5" />
+              </Button>
+
+              <Button
+                size="icon"
+                variant={showFileSharing ? "default" : "secondary"}
+                onClick={() => setShowFileSharing(!showFileSharing)}
+                className="rounded-full w-12 h-12"
+                data-testid="button-toggle-files"
+                title="File Sharing"
+              >
+                <FileUp className="w-5 h-5" />
+              </Button>
+
               <div className="rounded-full overflow-hidden">
                 <QualitySelector
                   currentQuality={videoQuality}
@@ -1524,6 +1604,30 @@ export default function Room() {
             onClose={() => setShowSettings(false)}
             onAudioSettingsChange={handleAudioSettingsChange}
             onVideoSettingsChange={handleVideoSettingsChange}
+          />
+        )}
+
+        <BackgroundControls
+          open={showBackgroundControls}
+          onOpenChange={setShowBackgroundControls}
+          settings={backgroundSettings}
+          onSettingsChange={(settings) => setBackgroundSettings(prev => ({ ...prev, ...settings }))}
+          isProcessing={isBackgroundProcessing}
+        />
+
+        {showFileSharing && (
+          <FileSharing
+            onClose={() => setShowFileSharing(false)}
+            participantName={participantName}
+            onFileShare={(file) => {
+              setSharedFiles(prev => [...prev, file]);
+              wsRef.current?.send(JSON.stringify({
+                type: "file-share",
+                roomId,
+                file,
+              }));
+            }}
+            sharedFiles={sharedFiles}
           />
         )}
 

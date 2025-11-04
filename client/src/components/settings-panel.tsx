@@ -24,6 +24,8 @@ export interface VideoSettings {
   brightness: number;
   contrast: number;
   saturation: number;
+  smoothing?: number;
+  sharpness?: number;
 }
 
 export function SettingsPanel({ onClose, onAudioSettingsChange, onVideoSettingsChange }: SettingsPanelProps) {
@@ -35,6 +37,8 @@ export function SettingsPanel({ onClose, onAudioSettingsChange, onVideoSettingsC
   const [brightness, setBrightness] = useState(100);
   const [contrast, setContrast] = useState(100);
   const [saturation, setSaturation] = useState(100);
+  const [smoothing, setSmoothing] = useState(0);
+  const [sharpness, setSharpness] = useState(100);
 
   useEffect(() => {
     if (onAudioSettingsChange) {
@@ -53,9 +57,11 @@ export function SettingsPanel({ onClose, onAudioSettingsChange, onVideoSettingsC
         brightness,
         contrast,
         saturation,
+        smoothing,
+        sharpness,
       });
     }
-  }, [brightness, contrast, saturation, onVideoSettingsChange]);
+  }, [brightness, contrast, saturation, smoothing, sharpness, onVideoSettingsChange]);
 
   return (
     <div className="w-96 border-l bg-card flex flex-col" data-testid="settings-panel">
@@ -203,9 +209,45 @@ export function SettingsPanel({ onClose, onAudioSettingsChange, onVideoSettingsC
               />
             </div>
 
+            <div className="border-t pt-4 space-y-4">
+              <div className="space-y-2">
+                <div className="flex justify-between text-sm">
+                  <Label>Skin Smoothing</Label>
+                  <span className="text-muted-foreground font-mono" data-testid="value-smoothing">
+                    {smoothing}%
+                  </span>
+                </div>
+                <Slider
+                  value={[smoothing]}
+                  onValueChange={([value]) => setSmoothing(value)}
+                  min={0}
+                  max={100}
+                  step={1}
+                  data-testid="slider-smoothing"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <div className="flex justify-between text-sm">
+                  <Label>Sharpness</Label>
+                  <span className="text-muted-foreground font-mono" data-testid="value-sharpness">
+                    {sharpness}%
+                  </span>
+                </div>
+                <Slider
+                  value={[sharpness]}
+                  onValueChange={([value]) => setSharpness(value)}
+                  min={0}
+                  max={200}
+                  step={1}
+                  data-testid="slider-sharpness"
+                />
+              </div>
+            </div>
+
             <div className="border-t pt-4">
               <p className="text-sm text-muted-foreground">
-                Adjust video appearance in real-time. Changes apply to your camera feed.
+                Adjust video appearance and apply beauty filters in real-time.
               </p>
             </div>
           </TabsContent>
