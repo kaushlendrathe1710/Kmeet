@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { useRoute, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Mic, MicOff, Video, VideoOff, Monitor, MonitorOff, MessageSquare, Users, Settings, Phone, Radio, Copy, Check, UserPlus } from "lucide-react";
+import { Mic, MicOff, Video, VideoOff, Monitor, MonitorOff, MessageSquare, Users, Settings, Phone, Radio, Copy, Check, UserPlus, Hand } from "lucide-react";
 import { VideoGrid } from "@/components/video-grid";
 import { ChatPanel } from "@/components/chat-panel";
 import { ParticipantsPanel } from "@/components/participants-panel";
@@ -32,6 +32,7 @@ export default function Room() {
   const [showSettings, setShowSettings] = useState(false);
   const [showJoinRequests, setShowJoinRequests] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
+  const [handRaised, setHandRaised] = useState(false);
   const [isWaitingApproval, setIsWaitingApproval] = useState(false);
   const [isHost, setIsHost] = useState(false);
   
@@ -106,6 +107,9 @@ export default function Room() {
         case 'p':
           setShowParticipants(prev => !prev);
           break;
+        case 'h':
+          toggleHandRaise();
+          break;
         case 'f':
           if (document.fullscreenElement) {
             document.exitFullscreen();
@@ -144,6 +148,9 @@ export default function Room() {
         isAudioEnabled: true,
         isVideoEnabled: true,
         isScreenSharing: false,
+        isHost: false,
+        approvalStatus: "pending",
+        handRaised: false,
         joinedAt: Date.now(),
       };
       
@@ -305,6 +312,21 @@ export default function Room() {
         setParticipants(prev => prev.map(p => 
           p.id === message.participantId ? { ...p, isVideoEnabled: message.isEnabled } : p
         ));
+        break;
+      
+      case "hand-raised":
+        setParticipants(prev => prev.map(p => 
+          p.id === message.participantId ? { ...p, handRaised: message.isRaised } : p
+        ));
+        if (message.isRaised) {
+          const participant = participants.find(p => p.id === message.participantId);
+          if (participant && participant.id !== participantId) {
+            toast({
+              title: "Hand Raised",
+              description: `${participant.name} raised their hand`,
+            });
+          }
+        }
         break;
     }
   };
@@ -525,6 +547,22 @@ export default function Room() {
     }
   };
 
+  const toggleHandRaise = () => {
+    const newHandRaisedState = !handRaised;
+    setHandRaised(newHandRaisedState);
+    
+    wsRef.current?.send(JSON.stringify({
+      type: "raise-hand",
+      roomId,
+      participantId,
+      isRaised: newHandRaisedState,
+    }));
+    
+    setParticipants(prev => prev.map(p => 
+      p.id === participantId ? { ...p, handRaised: newHandRaisedState } : p
+    ));
+  };
+
   const sendMessage = (message: string) => {
     wsRef.current?.send(JSON.stringify({
       type: "chat-message",
@@ -670,6 +708,16 @@ export default function Room() {
                 data-testid="button-toggle-screen"
               >
                 {isScreenSharing ? <MonitorOff className="w-5 h-5" /> : <Monitor className="w-5 h-5" />}
+              </Button>
+
+              <Button
+                size="icon"
+                variant={handRaised ? "default" : "secondary"}
+                onClick={toggleHandRaise}
+                className="rounded-full w-12 h-12"
+                data-testid="button-raise-hand"
+              >
+                <Hand className="w-5 h-5" />
               </Button>
 
               <RecordingControls

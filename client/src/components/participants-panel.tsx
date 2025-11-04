@@ -1,6 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { X, Mic, MicOff, Video, VideoOff, UserX } from "lucide-react";
+import { X, Mic, MicOff, Video, VideoOff, UserX, Hand } from "lucide-react";
 import type { Participant } from "@shared/schema";
 
 interface ParticipantsPanelProps {
@@ -57,6 +57,9 @@ export function ParticipantsPanel({ participants, currentParticipantId, isHost, 
                   {participant.name}
                   {participant.isHost && (
                     <span className="text-xs bg-primary/10 text-primary px-1.5 py-0.5 rounded">Host</span>
+                  )}
+                  {participant.handRaised && (
+                    <Hand className="w-4 h-4 text-primary" data-testid={`hand-raised-${participant.id}`} />
                   )}
                 </div>
                 <div className="text-xs text-muted-foreground flex items-center gap-2 mt-1">
