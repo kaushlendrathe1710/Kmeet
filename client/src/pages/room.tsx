@@ -828,6 +828,9 @@ export default function Room() {
                 onToggleRecording={() => setIsRecording(!isRecording)}
                 localStream={processedStream || localStream}
                 onCountdownChange={setRecordingCountdown}
+                remoteStreams={remoteStreams}
+                participants={participants}
+                participantName={participantName}
               />
 
               <div className="w-px h-8 bg-border mx-2" />
