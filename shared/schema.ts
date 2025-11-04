@@ -135,6 +135,13 @@ export const wsMessageSchema = z.discriminatedUnion("type", [
     participantId: z.string(),
     isRaised: z.boolean(),
   }),
+  z.object({
+    type: z.literal("emoji-reaction"),
+    roomId: z.string(),
+    participantId: z.string(),
+    participantName: z.string(),
+    emoji: z.enum(["👍", "❤️", "👏", "😂"]),
+  }),
 ]);
 
 export type WSMessage = z.infer<typeof wsMessageSchema>;

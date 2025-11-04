@@ -390,6 +390,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
             console.log(`Participant ${participantId} ${isRaised ? 'raised' : 'lowered'} hand in room ${roomId}`);
             break;
           }
+
+          case 'emoji-reaction': {
+            const { roomId, participantId, participantName, emoji } = message;
+            
+            broadcastToRoom(roomId, '', {
+              type: 'emoji-reaction',
+              participantId,
+              participantName,
+              emoji,
+            });
+
+            console.log(`Participant ${participantName} sent ${emoji} reaction in room ${roomId}`);
+            break;
+          }
         }
       } catch (error) {
         console.error('Error handling WebSocket message:', error);

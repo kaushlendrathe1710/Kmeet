@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { useRoute, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Mic, MicOff, Video, VideoOff, Monitor, MonitorOff, MessageSquare, Users, Settings, Phone, Radio, Copy, Check, UserPlus, Hand } from "lucide-react";
+import { Mic, MicOff, Video, VideoOff, Monitor, MonitorOff, MessageSquare, Users, Settings, Phone, Radio, Copy, Check, UserPlus, Hand, Smile } from "lucide-react";
 import { VideoGrid } from "@/components/video-grid";
 import { ChatPanel } from "@/components/chat-panel";
 import { ParticipantsPanel } from "@/components/participants-panel";
@@ -10,8 +10,15 @@ import { SettingsPanel, type AudioSettings, type VideoSettings } from "@/compone
 import { RecordingControls } from "@/components/recording-controls";
 import { WaitingRoom } from "@/components/waiting-room";
 import { JoinRequestsPanel } from "@/components/join-requests-panel";
+import { EmojiReactionsContainer } from "@/components/emoji-reaction";
 import { useToast } from "@/hooks/use-toast";
 import { MediaProcessor } from "@/lib/media-processor";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import type { Participant, ChatMessage } from "@shared/schema";
 
 export default function Room() {
@@ -35,6 +42,7 @@ export default function Room() {
   const [handRaised, setHandRaised] = useState(false);
   const [isWaitingApproval, setIsWaitingApproval] = useState(false);
   const [isHost, setIsHost] = useState(false);
+  const [reactions, setReactions] = useState<Array<{ id: string; emoji: string }>>([]);
   
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -328,6 +336,11 @@ export default function Room() {
           }
         }
         break;
+      
+      case "emoji-reaction":
+        const reactionId = `${message.participantId}-${Date.now()}`;
+        setReactions(prev => [...prev, { id: reactionId, emoji: message.emoji }]);
+        break;
     }
   };
 
@@ -563,6 +576,20 @@ export default function Room() {
     ));
   };
 
+  const sendReaction = (emoji: string) => {
+    wsRef.current?.send(JSON.stringify({
+      type: "emoji-reaction",
+      roomId,
+      participantId,
+      participantName,
+      emoji,
+    }));
+  };
+
+  const removeReaction = (id: string) => {
+    setReactions(prev => prev.filter(r => r.id !== id));
+  };
+
   const sendMessage = (message: string) => {
     wsRef.current?.send(JSON.stringify({
       type: "chat-message",
@@ -720,6 +747,37 @@ export default function Room() {
                 <Hand className="w-5 h-5" />
               </Button>
 
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    size="icon"
+                    variant="secondary"
+                    className="rounded-full w-12 h-12"
+                    data-testid="button-reactions"
+                  >
+                    <Smile className="w-5 h-5" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent>
+                  <DropdownMenuItem onClick={() => sendReaction("👍")} data-testid="reaction-thumbs-up">
+                    <span className="text-2xl">👍</span>
+                    <span className="ml-2">Thumbs Up</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => sendReaction("❤️")} data-testid="reaction-heart">
+                    <span className="text-2xl">❤️</span>
+                    <span className="ml-2">Heart</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => sendReaction("👏")} data-testid="reaction-clap">
+                    <span className="text-2xl">👏</span>
+                    <span className="ml-2">Clap</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => sendReaction("😂")} data-testid="reaction-laugh">
+                    <span className="text-2xl">😂</span>
+                    <span className="ml-2">Laugh</span>
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+
               <RecordingControls
                 isRecording={isRecording}
                 onToggleRecording={() => setIsRecording(!isRecording)}
@@ -831,6 +889,11 @@ export default function Room() {
             onClose={() => setShowJoinRequests(false)}
           />
         )}
+
+        <EmojiReactionsContainer
+          reactions={reactions}
+          onReactionComplete={removeReaction}
+        />
       </div>
     </div>
   );
