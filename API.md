@@ -1,81 +1,45 @@
-# PodcastMeet - API Documentation
+# PodcastMeet API Documentation
 
 ## Overview
-This document describes all HTTP API endpoints and WebSocket messages available in PodcastMeet.
+
+PodcastMeet uses WebSocket for real-time communication between clients and server. All messages are JSON-formatted and follow a consistent structure. The server also provides HTTP endpoints for health checks and future REST API capabilities.
 
 ---
 
-## 🌐 HTTP API Endpoints
+## WebSocket Connection
 
-### Base URL
-- Development: `http://localhost:5000`
-- Production: Your deployed URL
+**Endpoint**: `wss://[your-domain]/ws`
 
----
-
-### Health Check
-
-#### `GET /api/health`
-Check if the server is running.
-
-**Response:**
-```json
-{
-  "status": "ok",
-  "timestamp": 1234567890
-}
-```
+All clients must connect to this endpoint and send a `join-room` message before sending any other messages. Messages from unregistered clients (without `participantId`) are blocked except for `join-room`.
 
 ---
 
-## 🔌 WebSocket API
+## WebSocket Message Types
 
-### Connection
-Connect to WebSocket server at: `ws://your-domain/`
-
-### Message Format
-All messages are JSON strings with a `type` field and additional data.
-
----
-
-## 📨 WebSocket Message Types
-
-### 1. Room Management
+### Room Management
 
 #### `join-room`
-Request to join a room (sent by client).
+Join or create a room. The first participant becomes the host.
 
 **Client → Server:**
 ```json
 {
   "type": "join-room",
-  "roomId": "ABCD1234",
-  "participantId": "uuid-v4",
-  "participantName": "John Doe"
+  "roomId": "string",
+  "participantId": "string",
+  "participantName": "string"
 }
 ```
 
-**Server Response (Host):**
+**Response (Host)**:
 ```json
 {
   "type": "participants-list",
-  "participants": [
-    {
-      "id": "uuid-v4",
-      "name": "John Doe",
-      "roomId": "ABCD1234",
-      "isAudioEnabled": true,
-      "isVideoEnabled": true,
-      "isScreenSharing": false,
-      "isHost": true,
-      "approvalStatus": "approved",
-      "joinedAt": 1234567890
-    }
-  ]
+  "participants": [...]
 }
 ```
 
-**Server Response (Non-Host):**
+**Response (Guest - Pending Approval)**:
 ```json
 {
   "type": "waiting-approval",
@@ -83,102 +47,86 @@ Request to join a room (sent by client).
 }
 ```
 
+**Error (Locked Room)**:
+```json
+{
+  "type": "room-locked-error",
+  "message": "This room is locked and not accepting new participants"
+}
+```
+
 ---
 
 #### `leave-room`
-Leave a room (sent by client).
+Participant voluntarily leaves the room.
 
 **Client → Server:**
 ```json
 {
   "type": "leave-room",
-  "roomId": "ABCD1234",
-  "participantId": "uuid-v4"
+  "roomId": "string",
+  "participantId": "string"
 }
 ```
 
-**Server → All Participants:**
+**Broadcast to Room:**
 ```json
 {
   "type": "participant-left",
-  "roomId": "ABCD1234",
-  "participantId": "uuid-v4",
-  "participantName": "John Doe"
+  "participantId": "string",
+  "participantName": "string"
 }
 ```
 
 ---
 
-### 2. Participant Approval
+### Participant Approval System
 
-#### `request-join`
-Broadcast to host when someone requests to join.
-
-**Server → Host:**
-```json
-{
-  "type": "join-request",
-  "participant": {
-    "id": "uuid-v4",
-    "name": "Jane Smith",
-    "roomId": "ABCD1234",
-    "isAudioEnabled": true,
-    "isVideoEnabled": true,
-    "isScreenSharing": false,
-    "isHost": false,
-    "approvalStatus": "pending",
-    "joinedAt": 1234567890
-  }
-}
-```
-
----
-
-#### `approve-participant`
-Host approves a participant (sent by host).
+#### `approve-participant` (Host Only)
+Host approves a pending participant.
 
 **Client → Server:**
 ```json
 {
   "type": "approve-participant",
-  "roomId": "ABCD1234",
-  "participantId": "host-uuid",
-  "targetParticipantId": "guest-uuid"
+  "roomId": "string",
+  "participantId": "string (host)",
+  "targetParticipantId": "string"
 }
 ```
 
-**Server → Approved Participant:**
+**To Approved Participant:**
 ```json
 {
   "type": "approval-granted",
-  "participants": [/* array of all participants */]
+  "participants": [...]
 }
 ```
 
-**Server → All Participants:**
+**Broadcast to Room:**
 ```json
 {
   "type": "participant-approved",
-  "participantId": "guest-uuid"
+  "participantId": "string"
 }
 ```
 
 ---
 
-#### `deny-participant`
-Host denies a participant (sent by host).
+#### `deny-participant` (Host Only)
+Host denies a pending participant.
 
 **Client → Server:**
 ```json
 {
   "type": "deny-participant",
-  "roomId": "ABCD1234",
-  "participantId": "host-uuid",
-  "targetParticipantId": "guest-uuid"
+  "roomId": "string",
+  "participantId": "string (host)",
+  "targetParticipantId": "string"
 }
 ```
 
-**Server → Denied Participant:**
+**To Denied Participant:**
 ```json
 {
   "type": "approval-denied",
@@ -186,30 +134,381 @@ Host denies a participant (sent by host).
 }
 ```
 
-**Server → All Participants:**
+**Broadcast to Room:**
 ```json
 {
   "type": "participant-denied",
-  "participantId": "guest-uuid"
+  "participantId": "string"
 }
 ```
 
 ---
 
-### 3. WebRTC Signaling
+#### `remove-participant` (Host Only)
+Host removes an approved participant from the room.
+
+**Client → Server:**
+```json
+{
+  "type": "remove-participant",
+  "roomId": "string",
+  "participantId": "string (host)",
+  "targetParticipantId": "string"
+}
+```
+
+**To Removed Participant:**
+```json
+{
+  "type": "removed-from-room",
+  "message": "You have been removed from the room by the host"
+}
+```
+
+**Broadcast to Room:**
+```json
+{
+  "type": "participant-left",
+  "participantId": "string",
+  "participantName": "string"
+}
+```
+
+---
+
+### Media Controls
+
+#### `toggle-audio`
+Enable or disable participant's microphone.
+
+**Client → Server:**
+```json
+{
+  "type": "toggle-audio",
+  "roomId": "string",
+  "participantId": "string",
+  "isEnabled": true
+}
+```
+
+**Broadcast to Room:**
+```json
+{
+  "type": "audio-toggled",
+  "participantId": "string",
+  "isEnabled": true
+}
+```
+
+---
+
+#### `toggle-video`
+Enable or disable participant's camera.
+
+**Client → Server:**
+```json
+{
+  "type": "toggle-video",
+  "roomId": "string",
+  "participantId": "string",
+  "isEnabled": true
+}
+```
+
+**Broadcast to Room:**
+```json
+{
+  "type": "video-toggled",
+  "participantId": "string",
+  "isEnabled": true
+}
+```
+
+---
+
+#### `screen-share`
+Start or stop screen sharing.
+
+**Client → Server:**
+```json
+{
+  "type": "screen-share",
+  "roomId": "string",
+  "participantId": "string",
+  "isSharing": true
+}
+```
+
+**Broadcast to Room:**
+```json
+{
+  "type": "screen-share",
+  "participantId": "string",
+  "isSharing": true
+}
+```
+
+---
+
+### Communication
+
+#### `chat-message`
+Send a chat message to all participants.
+
+**Client → Server:**
+```json
+{
+  "type": "chat-message",
+  "roomId": "string",
+  "participantId": "string",
+  "participantName": "string",
+  "message": "string"
+}
+```
+
+**Broadcast to Room:**
+```json
+{
+  "type": "chat-message",
+  "message": {
+    "id": "string",
+    "roomId": "string",
+    "participantId": "string",
+    "participantName": "string",
+    "message": "string",
+    "timestamp": 1234567890
+  }
+}
+```
+
+---
+
+#### `raise-hand`
+Raise or lower hand for attention.
+
+**Client → Server:**
+```json
+{
+  "type": "raise-hand",
+  "roomId": "string",
+  "participantId": "string",
+  "isRaised": true
+}
+```
+
+**Broadcast to Room:**
+```json
+{
+  "type": "hand-raised",
+  "participantId": "string",
+  "isRaised": true
+}
+```
+
+---
+
+#### `emoji-reaction`
+Send an emoji reaction (visible temporarily).
+
+**Client → Server:**
+```json
+{
+  "type": "emoji-reaction",
+  "roomId": "string",
+  "participantId": "string",
+  "participantName": "string",
+  "emoji": "👍"
+}
+```
+
+**Broadcast to Room:**
+```json
+{
+  "type": "emoji-reaction",
+  "participantId": "string",
+  "participantName": "string",
+  "emoji": "👍"
+}
+```
+
+---
+
+### File Sharing
+
+#### `file-upload`
+Share a file with all participants (max 5MB).
+
+**Client → Server:**
+```json
+{
+  "type": "file-upload",
+  "roomId": "string",
+  "participantId": "string",
+  "file": {
+    "id": "string",
+    "name": "string",
+    "size": 1234567,
+    "type": "string",
+    "uploadedBy": "string",
+    "timestamp": 1234567890,
+    "data": "base64-encoded-string"
+  }
+}
+```
+
+**Broadcast to Room:**
+```json
+{
+  "type": "file-shared",
+  "file": {
+    "id": "string",
+    "name": "string",
+    "size": 1234567,
+    "type": "string",
+    "uploadedBy": "string",
+    "timestamp": 1234567890,
+    "data": "base64-encoded-string"
+  }
+}
+```
+
+**Limits**: Maximum file size is 5MB
+
+---
+
+### Host Controls
+
+#### `mute-all` (Host Only)
+Host mutes all participants' microphones.
+
+**Client → Server:**
+```json
+{
+  "type": "mute-all",
+  "roomId": "string",
+  "participantId": "string (host)"
+}
+```
+
+**Broadcast to Room:**
+```json
+{
+  "type": "mute-all-command"
+}
+```
+
+---
+
+#### `force-disable-audio` (Host Only)
+Host force-mutes a specific participant.
+
+**Client → Server:**
+```json
+{
+  "type": "force-disable-audio",
+  "roomId": "string",
+  "participantId": "string (host)",
+  "targetParticipantId": "string"
+}
+```
+
+**To Target Participant:**
+```json
+{
+  "type": "force-audio-disabled"
+}
+```
+
+---
+
+#### `lock-room` (Host Only)
+Lock or unlock the room to prevent new participants from joining.
+
+**Client → Server:**
+```json
+{
+  "type": "lock-room",
+  "roomId": "string",
+  "participantId": "string (host)",
+  "isLocked": true
+}
+```
+
+**Broadcast to Room:**
+```json
+{
+  "type": "room-locked",
+  "roomId": "string",
+  "isLocked": true
+}
+```
+
+---
+
+#### `transfer-host` (Host Only)
+Transfer host role to another approved participant.
+
+**Client → Server:**
+```json
+{
+  "type": "transfer-host",
+  "roomId": "string",
+  "participantId": "string (current host)",
+  "newHostId": "string"
+}
+```
+
+**Broadcast to Room:**
+```json
+{
+  "type": "host-transferred",
+  "roomId": "string",
+  "newHostId": "string",
+  "newHostName": "string"
+}
+```
+
+---
+
+#### `spotlight-participant` (Host Only)
+Spotlight a participant (or clear spotlight with null).
+
+**Client → Server:**
+```json
+{
+  "type": "spotlight-participant",
+  "roomId": "string",
+  "participantId": "string (host)",
+  "targetParticipantId": "string | null"
+}
+```
+
+**Broadcast to Room:**
+```json
+{
+  "type": "participant-spotlighted",
+  "roomId": "string",
+  "spotlightedParticipantId": "string | null",
+  "spotlightedParticipantName": "string | null"
+}
+```
+
+---
+
+### WebRTC Signaling
 
 #### `signal`
-Exchange WebRTC signaling data (offers, answers, ICE candidates).
+Exchange WebRTC signaling data for peer connection establishment.
 
 **Client → Server:**
 ```json
 {
   "type": "signal",
-  "roomId": "ABCD1234",
-  "targetId": "recipient-uuid",
-  "participantId": "sender-uuid",
+  "roomId": "string",
+  "participantId": "string (sender)",
+  "targetId": "string (recipient)",
   "signal": {
-    "type": "offer|answer|candidate",
+    "type": "offer | answer | candidate",
     "sdp": "...",
     "candidate": "..."
   }
@@ -220,143 +519,14 @@ Exchange WebRTC signaling data (offers, answers, ICE candidates).
 ```json
 {
   "type": "signal",
-  "participantId": "sender-uuid",
-  "signal": {/* signal data */}
+  "participantId": "string (sender)",
+  "signal": {...}
 }
 ```
 
 ---
 
-### 4. Media Controls
-
-#### `toggle-audio`
-Notify when participant toggles microphone.
-
-**Client → Server:**
-```json
-{
-  "type": "toggle-audio",
-  "roomId": "ABCD1234",
-  "participantId": "uuid-v4",
-  "isEnabled": false
-}
-```
-
-**Server → All Participants:**
-```json
-{
-  "type": "audio-toggled",
-  "participantId": "uuid-v4",
-  "isEnabled": false
-}
-```
-
----
-
-#### `toggle-video`
-Notify when participant toggles camera.
-
-**Client → Server:**
-```json
-{
-  "type": "toggle-video",
-  "roomId": "ABCD1234",
-  "participantId": "uuid-v4",
-  "isEnabled": false
-}
-```
-
-**Server → All Participants:**
-```json
-{
-  "type": "video-toggled",
-  "participantId": "uuid-v4",
-  "isEnabled": false
-}
-```
-
----
-
-#### `screen-share`
-Notify when participant toggles screen sharing.
-
-**Client → Server:**
-```json
-{
-  "type": "screen-share",
-  "roomId": "ABCD1234",
-  "participantId": "uuid-v4",
-  "isSharing": true
-}
-```
-
-**Server → All Participants:**
-```json
-{
-  "type": "screen-sharing-toggled",
-  "participantId": "uuid-v4",
-  "isSharing": true
-}
-```
-
----
-
-### 5. Chat Messages
-
-#### `chat-message`
-Send a chat message.
-
-**Client → Server:**
-```json
-{
-  "type": "chat-message",
-  "roomId": "ABCD1234",
-  "participantId": "uuid-v4",
-  "participantName": "John Doe",
-  "message": "Hello everyone!"
-}
-```
-
-**Server → All Participants:**
-```json
-{
-  "type": "chat-message",
-  "message": {
-    "id": "message-uuid",
-    "roomId": "ABCD1234",
-    "participantId": "uuid-v4",
-    "participantName": "John Doe",
-    "message": "Hello everyone!",
-    "timestamp": 1234567890
-  }
-}
-```
-
----
-
-### 6. Error Messages
-
-#### `error`
-Server sends error messages when requests fail.
-
-**Server → Client:**
-```json
-{
-  "type": "error",
-  "message": "Only the host can approve participants"
-}
-```
-
-**Common Error Messages:**
-- `"Participant not found"`
-- `"You are not in this room"`
-- `"Only the host can approve participants"`
-- `"Only the host can deny participants"`
-- `"Target participant not found in this room"`
-
----
-
-## 📊 Data Models
+## Data Models
 
 ### Participant
 ```typescript
@@ -369,7 +539,9 @@ Server sends error messages when requests fail.
   isScreenSharing: boolean;      // Screen share status
   isHost: boolean;               // Host privilege
   approvalStatus: "pending" | "approved" | "denied";
-  joinedAt: number;              // Unix timestamp
+  handRaised: boolean;           // Hand raise status
+  canRecord: boolean;            // Recording permission
+  joinedAt: number;              // Unix timestamp (ms)
 }
 ```
 
@@ -377,10 +549,10 @@ Server sends error messages when requests fail.
 ```typescript
 {
   id: string;                    // 8-character room ID
-  name: string;                  // Display name
-  createdAt: number;             // Unix timestamp
   hostId: string;                // Host participant ID
-  participants: string[];        // Array of participant IDs
+  isLocked: boolean;             // Lock status
+  spotlightedParticipantId: string | null;  // Spotlighted participant
+  createdAt: number;             // Unix timestamp (ms)
 }
 ```
 
@@ -392,51 +564,155 @@ Server sends error messages when requests fail.
   participantId: string;         // Sender ID
   participantName: string;       // Sender name
   message: string;               // Message content
-  timestamp: number;             // Unix timestamp
+  timestamp: number;             // Unix timestamp (ms)
 }
 ```
 
 ---
 
-## 🔐 Authorization
+## Error Handling
+
+All errors are sent to the requesting client:
+
+```json
+{
+  "type": "error",
+  "message": "Error description"
+}
+```
+
+### Common Error Messages:
+- `"Participant not found"`
+- `"You are not in this room"`
+- `"Only the host can approve participants"`
+- `"Only the host can deny participants"`
+- `"Only the host can remove participants"`
+- `"Only the host can lock/unlock the room"`
+- `"Only the host can transfer host role"`
+- `"Only the host can spotlight participants"`
+- `"Only the host can force disable audio"`
+- `"Target participant not found in this room"`
+- `"Cannot remove the host"`
+- `"Cannot transfer host role to yourself"`
+- `"Cannot transfer host to this participant"`
+
+---
+
+## Security & Authorization
+
+### Message Validation
+1. All messages from clients without `participantId` are blocked (except `join-room`)
+2. All host-only actions verify the requester's `isHost` status
+3. All operations verify participants are in the same room
+4. Room isolation is strictly enforced
 
 ### Host Privileges
-Only the host (first participant) can:
-- Approve participants (`approve-participant`)
-- Deny participants (`deny-participant`)
+Only the host (first participant or transferred host) can:
+- Approve participants
+- Deny participants
+- Remove participants
+- Mute all participants
+- Force-mute individual participants
+- Lock/unlock the room
+- Transfer host role
+- Spotlight participants
 
 ### Validation Rules
-All `approve-participant` and `deny-participant` requests validate:
+All host actions validate:
 1. Requester exists in storage
 2. Requester is in the specified room
 3. Requester has `isHost: true`
-4. Target participant exists in the same room
-
-Failed validations return an `error` message.
-
----
-
-## 🛡️ Security Notes
-
-### WebSocket Security
-- All messages validated using Zod schemas
-- Host authorization checked server-side
-- Room isolation enforced
-- Participant membership verified
-- Cross-room operations blocked
-
-### Best Practices
-- Always validate message types
-- Check participant status before operations
-- Handle disconnections gracefully
-- Clean up resources on leave
-- Log security violations
+4. Target participant exists and is in the same room
+5. Target participant has appropriate status (e.g., approved for removal)
 
 ---
 
-## 📝 Message Flow Examples
+## Recording System
 
-### Example 1: Joining a Room as Host
+Recording is handled **entirely client-side** using RecordRTC. The server does not receive or process recording data.
+
+### Recording Features:
+- **Individual Track Recording**: Each participant's audio is recorded separately
+- **Format Support**: WebM (default) or WAV
+- **Quality**: 48kHz audio sample rate for broadcast quality
+- **Controls**: Start/Stop with countdown, Pause/Resume
+- **Automatic Download**: All tracks download when recording stops
+- **Dynamic Participants**: Handles participants joining/leaving during recording
+
+### File Naming Convention:
+```
+YYYY-MM-DD_HH-MM_ParticipantName.webm
+```
+
+### Recording Workflow:
+1. Click record button → 3-second countdown
+2. Press 'Escape' to cancel countdown
+3. Recording starts → all participants recorded on separate tracks
+4. Optional: Pause/resume during session
+5. Click stop → all tracks automatically download
+
+---
+
+## Connection Lifecycle
+
+1. **Connect**: Client establishes WebSocket connection to `/ws`
+2. **Join**: Client sends `join-room` message
+3. **Approval**: Guest waits for host approval (host auto-approved)
+4. **WebRTC Setup**: Participants exchange `signal` messages
+5. **Active Session**: Participants exchange media, chat, and control messages
+6. **Disconnect**: Connection closes, participant removed from room
+
+---
+
+## Best Practices
+
+### For Clients:
+1. **Reconnection**: Implement exponential backoff for reconnection attempts
+2. **State Sync**: Listen for all broadcast messages to keep UI in sync
+3. **Error Handling**: Handle all error types gracefully with user feedback
+4. **File Validation**: Validate file size client-side before upload (5MB max)
+5. **WebRTC Cleanup**: Properly close peer connections on disconnect
+6. **Recording Management**: Handle RecordRTC instances carefully to avoid memory leaks
+
+### For Server Integration:
+1. **Message Validation**: All messages are validated using Zod schemas
+2. **Host Authorization**: Always verify host status server-side
+3. **Room Isolation**: Enforce room boundaries for all operations
+4. **Participant Membership**: Verify participants exist and are approved
+5. **Security Logging**: Log all security violations and unauthorized attempts
+
+---
+
+## Debugging
+
+### Server Logs
+The server logs all WebSocket events to console:
+- Join/leave events
+- Approval/denial actions
+- Host control actions
+- Security violations
+- Error conditions
+
+### Browser DevTools
+Use browser DevTools to:
+- Monitor WebSocket messages (Network tab → WS filter)
+- Check connection status
+- View sent/received messages
+- Debug signaling issues
+- Inspect RecordRTC recording state
+
+### Common Issues:
+1. **WebRTC Connection Failed**: Check STUN server connectivity
+2. **Recording Not Starting**: Verify microphone permissions granted
+3. **File Upload Failed**: Check file size is under 5MB
+4. **Participant Not Approved**: Ensure host has approved the join request
+5. **Locked Room**: Room must be unlocked to allow new participants
+
+---
+
+## Example Message Flows
+
+### Example 1: Joining as Host
 ```
 Client → Server: join-room
 Server → Client: participants-list
@@ -458,84 +734,31 @@ Participant A → Server: signal (offer)
 Server → Participant B: signal (offer)
 Participant B → Server: signal (answer)
 Server → Participant A: signal (answer)
-Participant A → Server: signal (ICE candidate)
-Server → Participant B: signal (ICE candidate)
+Participant A ↔ Server ↔ Participant B: signal (ICE candidates)
 ```
 
-### Example 4: Sending Chat Message
+### Example 4: Screen Sharing
 ```
-Client → Server: chat-message
-Server → All Participants: chat-message
+Client → Server: screen-share (isSharing: true)
+Server → All: screen-share (isSharing: true)
+[User clicks browser "Stop sharing"]
+Client → Server: screen-share (isSharing: false)
+Server → All: screen-share (isSharing: false)
+```
+
+### Example 5: File Sharing
+```
+Client → Server: file-upload (base64 data, < 5MB)
+Server → All: file-shared (same data)
+Other clients: Download from shared data
 ```
 
 ---
 
-## 🔄 Connection Lifecycle
+## Additional Resources
 
-### 1. Connect
-Client establishes WebSocket connection.
-
-### 2. Join Room
-Client sends `join-room` message.
-
-### 3. Approval (if guest)
-Guest waits for host approval via `approve-participant`.
-
-### 4. WebRTC Setup
-Participants exchange `signal` messages to establish peer connections.
-
-### 5. Active Session
-Participants exchange media, chat, and control messages.
-
-### 6. Disconnect
-Client sends `leave-room` or connection closes.
-
-### 7. Cleanup
-Server removes participant and notifies others.
-
----
-
-## 📚 Additional Resources
-
-### TypeScript Types
-All message types are defined in `shared/schema.ts`:
-- `WSMessage` - Union type of all WebSocket messages
-- `Participant` - Participant data structure
-- `Room` - Room data structure
-- `ChatMessage` - Chat message structure
-
-### Storage Interface
-Storage operations in `server/storage.ts`:
-- `createRoom(roomId, hostId)` - Create new room
-- `getRoom(roomId)` - Get room data
-- `addParticipant(participant)` - Add participant
-- `getParticipant(participantId)` - Get single participant
-- `getParticipants(roomId)` - Get all room participants
-- `updateParticipant(id, updates)` - Update participant
-- `removeParticipant(roomId, participantId)` - Remove participant
-- `addMessage(message)` - Add chat message
-- `getMessages(roomId)` - Get chat history
-
----
-
-## 🐛 Debugging
-
-### Enable Logging
-Server logs all WebSocket events to console:
-- Join/leave events
-- Approval/denial actions
-- Security violations
-- Error conditions
-
-### Common Issues
-1. **Participant not found**: Ensure participant ID exists
-2. **Not in room**: Verify room ID matches participant's room
-3. **Not host**: Check `isHost` flag is true
-4. **Target not found**: Confirm target participant is in room
-
-### Testing Tools
-Use browser DevTools to:
-- Monitor WebSocket messages (Network tab)
-- Check connection status
-- View sent/received messages
-- Debug signaling issues
+- **TypeScript Types**: `shared/schema.ts` - All message and data types
+- **Storage Interface**: `server/storage.ts` - In-memory storage operations
+- **WebSocket Handlers**: `server/routes.ts` - All message handling logic
+- **Frontend Implementation**: `client/src/pages/room.tsx` - Main room component
+- **Recording Component**: `client/src/components/recording-controls.tsx`

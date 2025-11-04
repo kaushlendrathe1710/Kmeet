@@ -24,13 +24,64 @@ PodcastMeet implements WebRTC for peer-to-peer video/audio streaming and screen 
 
 ### Core Features & Implementations
 
-Key features include host controls (remove participant, mute all, transfer host, lock room), comprehensive keyboard shortcuts, hand raising, emoji reactions, recording countdown, hide self-view, individual track recording, audio level meters, active speaker detection, network quality indicators, grid/speaker view toggle, pin participant, recording pause/resume, reconnection handling with exponential backoff, packet loss display, bandwidth adaptation, quality presets (Podcast, Interview, Quick Call), auto-save/recovery, background blur (TensorFlow.js BodyPix), virtual backgrounds, beauty filters, and file upload/download.
+Key features include:
+- **Host Controls**: Remove participant, mute all, transfer host, lock room
+- **Recording Features**: Individual track recording, pause/resume, countdown, WebM/WAV format selection
+- **Communication**: Hand raising, emoji reactions, chat messaging, file sharing (5MB limit)
+- **Media Controls**: Audio/video toggle, screen sharing with ref-based reentrancy prevention
+- **Network & Quality**: Reconnection handling (exponential backoff), packet loss display, bandwidth adaptation, quality presets (Podcast, Interview, Quick Call)
+- **Visual Enhancements**: Background blur (TensorFlow.js BodyPix), virtual backgrounds, beauty filters
+- **UX Features**: Hide self-view, audio level meters, active speaker detection, network quality indicators, grid/speaker view toggle, pin participant, auto-save/recovery
+
+## Recording System
+
+### Individual Track Recording
+- Records each participant's audio separately for professional podcast editing
+- Supports WebM (default) and WAV formats
+- 48kHz audio sample rate for broadcast quality
+- Automatic file naming with timestamps and participant names
+
+### Recording Controls
+- **Start/Stop**: Record button with 3-second countdown
+- **Pause/Resume**: Pause recording without losing progress
+- **Cancel Countdown**: Press 'Escape' to abort countdown
+- **Format Selection**: Switch between WebM and WAV
+
+### Recording Workflow
+1. Click record button → 3-second countdown begins
+2. Recording starts → all participants recorded on separate tracks
+3. Optional: Pause/resume during session
+4. Click stop → all tracks automatically download
+5. Files named: `YYYY-MM-DD_HH-MM_ParticipantName.webm`
+
+### Dynamic Participant Handling
+- Participants joining mid-recording are automatically included
+- Departing participants' tracks saved up to their leave time
+- No data loss when participants come and go
+
+## Screen Sharing Implementation
+
+### Features
+- High-quality screen capture (1920x1080, 30fps)
+- System audio capture included
+- Real-time broadcasting to all participants
+- Keyboard shortcut: 's' key
+
+### State Management
+- Ref-based state tracking prevents duplicate notifications
+- Proper cleanup order prevents reentrancy issues
+- Handles both manual and browser-initiated stops
+
+### Notifications
+- "Screen Sharing Started" when beginning
+- Context-aware stop messages (manual vs browser-initiated)
+- Toast notifications for all state changes
 
 ## External Dependencies
 
 ### Third-Party Services
 - Google Fonts CDN (Inter, JetBrains Mono)
-- Google STUN servers
+- Google STUN servers (ice.google.com:19302, ice1.google.com:19302)
 
 ### Key Libraries
 - **WebRTC**: `simple-peer`, `recordrtc`
@@ -43,3 +94,61 @@ Key features include host controls (remove participant, mute all, transfer host,
 - **Build Tools**: Vite, esbuild, TypeScript
 - **Database**: Drizzle ORM, `@neondatabase/serverless` (PostgreSQL support)
 - **AI/ML**: TensorFlow.js (for background blur)
+
+## Environment Configuration
+
+### Required Variables
+- `SESSION_SECRET`: Secure random string for session cookie signing
+  - Generate with: `openssl rand -base64 32`
+  - **IMPORTANT**: Use a strong, unique value in production
+
+### Automatic Variables (Do Not Modify)
+- `PORT`: Automatically set by Replit (default: 5000)
+- `NODE_ENV`: Set to 'development' by npm run dev
+
+## Development Setup
+
+1. **Install Dependencies**:
+   ```bash
+   npm install
+   ```
+
+2. **Set Environment Variables**:
+   - Copy `.env.example` to `.env`
+   - Generate and set `SESSION_SECRET`
+
+3. **Run Development Server**:
+   ```bash
+   npm run dev
+   ```
+   - Frontend: Vite dev server
+   - Backend: Express server with WebSocket support
+   - Both run on port 5000
+
+## Project Structure
+
+```
+├── client/                    # Frontend React application
+│   ├── src/
+│   │   ├── components/        # Reusable UI components
+│   │   ├── pages/            # Page components (Home, Room)
+│   │   ├── hooks/            # Custom React hooks
+│   │   ├── lib/              # Utility libraries
+│   │   └── App.tsx           # Main app component
+├── server/                    # Backend Express application
+│   ├── index.ts              # Server entry point
+│   ├── routes.ts             # WebSocket handlers & API routes
+│   ├── storage.ts            # In-memory storage implementation
+│   └── vite.ts               # Vite integration
+├── shared/                    # Shared types between client/server
+│   └── schema.ts             # TypeScript types & Zod schemas
+└── .env.example              # Environment variable template
+```
+
+## Recent Changes
+
+### November 4, 2025
+- **Screen Sharing**: Implemented ref-based state tracking to prevent duplicate notifications
+- **Reentrancy Guard**: Fixed issue where manual stops triggered both manual and browser handlers
+- **State Management**: Proper operation order (ref → state → tracks) ensures clean cleanup
+- **Documentation**: Updated environment configuration and API documentation
