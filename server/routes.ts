@@ -32,6 +32,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
             clients.set(participantId, ws);
 
             let room = await storage.getRoom(roomId);
+            const isHost = !room;
+            
             if (!room) {
               room = await storage.createRoom(roomId, participantId);
             }
@@ -43,24 +45,158 @@ export async function registerRoutes(app: Express): Promise<Server> {
               isAudioEnabled: true,
               isVideoEnabled: true,
               isScreenSharing: false,
+              isHost,
+              approvalStatus: isHost ? "approved" : "pending",
               joinedAt: Date.now(),
             };
 
             await storage.addParticipant(participant);
 
+            if (isHost) {
+              const participants = await storage.getParticipants(roomId);
+              ws.send(JSON.stringify({
+                type: 'participants-list',
+                participants,
+              }));
+              console.log(`Host ${participantName} created room ${roomId}`);
+            } else {
+              ws.send(JSON.stringify({
+                type: 'waiting-approval',
+                message: 'Waiting for host to approve your join request',
+              }));
+
+              broadcastToRoom(roomId, participantId, {
+                type: 'join-request',
+                participant,
+              });
+
+              console.log(`Participant ${participantName} requesting to join room ${roomId}`);
+            }
+            break;
+          }
+
+          case 'approve-participant': {
+            const { roomId, participantId, targetParticipantId } = message;
+            
+            const requestingParticipant = await storage.getParticipant(participantId);
+            if (!requestingParticipant) {
+              console.error(`Unknown participant ${participantId} tried to approve - rejected`);
+              ws.send(JSON.stringify({
+                type: 'error',
+                message: 'Participant not found',
+              }));
+              break;
+            }
+
+            if (requestingParticipant.roomId !== roomId) {
+              console.error(`Participant ${participantId} tried to approve in wrong room ${roomId} - rejected`);
+              ws.send(JSON.stringify({
+                type: 'error',
+                message: 'You are not in this room',
+              }));
+              break;
+            }
+
+            if (!requestingParticipant.isHost) {
+              console.error(`Non-host ${participantId} tried to approve participant - rejected`);
+              ws.send(JSON.stringify({
+                type: 'error',
+                message: 'Only the host can approve participants',
+              }));
+              break;
+            }
+
+            const targetParticipant = await storage.getParticipant(targetParticipantId);
+            if (!targetParticipant || targetParticipant.roomId !== roomId) {
+              console.error(`Target participant ${targetParticipantId} not in room ${roomId} - rejected`);
+              ws.send(JSON.stringify({
+                type: 'error',
+                message: 'Target participant not found in this room',
+              }));
+              break;
+            }
+
+            await storage.updateParticipant(targetParticipantId, { approvalStatus: "approved" });
+
             const participants = await storage.getParticipants(roomId);
             
-            ws.send(JSON.stringify({
-              type: 'participants-list',
-              participants,
-            }));
+            const targetClient = clients.get(targetParticipantId);
+            if (targetClient) {
+              targetClient.send(JSON.stringify({
+                type: 'approval-granted',
+                participants,
+              }));
+            }
 
-            broadcastToRoom(roomId, participantId, {
-              type: 'participant-joined',
-              participant,
+            broadcastToRoom(roomId, '', {
+              type: 'participant-approved',
+              participantId: targetParticipantId,
             });
 
-            console.log(`Participant ${participantName} joined room ${roomId}`);
+            console.log(`Host ${participantId} approved participant ${targetParticipantId} in room ${roomId}`);
+            break;
+          }
+
+          case 'deny-participant': {
+            const { roomId, participantId, targetParticipantId } = message;
+            
+            const requestingParticipant = await storage.getParticipant(participantId);
+            if (!requestingParticipant) {
+              console.error(`Unknown participant ${participantId} tried to deny - rejected`);
+              ws.send(JSON.stringify({
+                type: 'error',
+                message: 'Participant not found',
+              }));
+              break;
+            }
+
+            if (requestingParticipant.roomId !== roomId) {
+              console.error(`Participant ${participantId} tried to deny in wrong room ${roomId} - rejected`);
+              ws.send(JSON.stringify({
+                type: 'error',
+                message: 'You are not in this room',
+              }));
+              break;
+            }
+
+            if (!requestingParticipant.isHost) {
+              console.error(`Non-host ${participantId} tried to deny participant - rejected`);
+              ws.send(JSON.stringify({
+                type: 'error',
+                message: 'Only the host can deny participants',
+              }));
+              break;
+            }
+
+            const targetParticipant = await storage.getParticipant(targetParticipantId);
+            if (!targetParticipant || targetParticipant.roomId !== roomId) {
+              console.error(`Target participant ${targetParticipantId} not in room ${roomId} - rejected`);
+              ws.send(JSON.stringify({
+                type: 'error',
+                message: 'Target participant not found in this room',
+              }));
+              break;
+            }
+
+            await storage.removeParticipant(roomId, targetParticipantId);
+
+            const targetClient = clients.get(targetParticipantId);
+            if (targetClient) {
+              targetClient.send(JSON.stringify({
+                type: 'approval-denied',
+                message: 'The host denied your join request',
+              }));
+              targetClient.close();
+            }
+
+            clients.delete(targetParticipantId);
+
+            broadcastToRoom(roomId, '', {
+              type: 'participant-denied',
+              participantId: targetParticipantId,
+            });
+
+            console.log(`Host ${participantId} denied participant ${targetParticipantId} in room ${roomId}`);
             break;
           }
 

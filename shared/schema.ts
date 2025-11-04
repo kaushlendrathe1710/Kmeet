@@ -36,6 +36,8 @@ export const participantSchema = z.object({
   isAudioEnabled: z.boolean().default(true),
   isVideoEnabled: z.boolean().default(true),
   isScreenSharing: z.boolean().default(false),
+  isHost: z.boolean().default(false),
+  approvalStatus: z.enum(["pending", "approved", "denied"]).default("pending"),
   joinedAt: z.number(),
 });
 
@@ -97,6 +99,28 @@ export const wsMessageSchema = z.discriminatedUnion("type", [
     roomId: z.string(),
     participantId: z.string(),
     isSharing: z.boolean(),
+  }),
+  z.object({
+    type: z.literal("request-join"),
+    roomId: z.string(),
+    participantId: z.string(),
+    participantName: z.string(),
+  }),
+  z.object({
+    type: z.literal("approve-participant"),
+    roomId: z.string(),
+    participantId: z.string(),
+    targetParticipantId: z.string(),
+  }),
+  z.object({
+    type: z.literal("deny-participant"),
+    roomId: z.string(),
+    participantId: z.string(),
+    targetParticipantId: z.string(),
+  }),
+  z.object({
+    type: z.literal("participant-denied"),
+    participantId: z.string(),
   }),
 ]);
 

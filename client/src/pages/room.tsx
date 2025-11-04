@@ -1,12 +1,15 @@
 import { useState, useEffect, useRef } from "react";
 import { useRoute, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
-import { Mic, MicOff, Video, VideoOff, Monitor, MonitorOff, MessageSquare, Users, Settings, Phone, Radio } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Mic, MicOff, Video, VideoOff, Monitor, MonitorOff, MessageSquare, Users, Settings, Phone, Radio, Copy, Check, UserPlus } from "lucide-react";
 import { VideoGrid } from "@/components/video-grid";
 import { ChatPanel } from "@/components/chat-panel";
 import { ParticipantsPanel } from "@/components/participants-panel";
 import { SettingsPanel, type AudioSettings, type VideoSettings } from "@/components/settings-panel";
 import { RecordingControls } from "@/components/recording-controls";
+import { WaitingRoom } from "@/components/waiting-room";
+import { JoinRequestsPanel } from "@/components/join-requests-panel";
 import { useToast } from "@/hooks/use-toast";
 import { MediaProcessor } from "@/lib/media-processor";
 import type { Participant, ChatMessage } from "@shared/schema";
@@ -27,6 +30,10 @@ export default function Room() {
   const [showChat, setShowChat] = useState(false);
   const [showParticipants, setShowParticipants] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [showJoinRequests, setShowJoinRequests] = useState(false);
+  const [linkCopied, setLinkCopied] = useState(false);
+  const [isWaitingApproval, setIsWaitingApproval] = useState(false);
+  const [isHost, setIsHost] = useState(false);
   
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -162,19 +169,47 @@ export default function Room() {
     console.log("Received WebSocket message:", message.type);
     
     switch (message.type) {
-      case "participant-joined":
+      case "waiting-approval":
+        setIsWaitingApproval(true);
+        setIsHost(false);
+        break;
+
+      case "approval-granted":
+        setIsWaitingApproval(false);
+        setParticipants(message.participants);
+        toast({
+          title: "Approved!",
+          description: "You have been approved to join the meeting",
+        });
+        break;
+
+      case "approval-denied":
+        toast({
+          title: "Access Denied",
+          description: message.message,
+          variant: "destructive",
+        });
+        setTimeout(() => setLocation("/"), 2000);
+        break;
+
+      case "join-request":
         if (message.participant.id !== participantId) {
-          setParticipants(prev => {
-            const exists = prev.find(p => p.id === message.participant.id);
-            if (exists) return prev;
-            return [...prev, message.participant];
-          });
-          
+          setParticipants(prev => [...prev, message.participant]);
           toast({
-            title: "Participant Joined",
-            description: `${message.participant.name} joined the meeting`,
+            title: "New Join Request",
+            description: `${message.participant.name} wants to join the meeting`,
           });
         }
+        break;
+
+      case "participant-approved":
+        setParticipants(prev => prev.map(p =>
+          p.id === message.participantId ? { ...p, approvalStatus: "approved" } : p
+        ));
+        break;
+
+      case "participant-denied":
+        setParticipants(prev => prev.filter(p => p.id !== message.participantId));
         break;
       
       case "participant-left":
@@ -197,11 +232,9 @@ export default function Room() {
       
       case "participants-list":
         console.log("Received participants list:", message.participants);
-        setParticipants(prev => {
-          const others = message.participants.filter((p: Participant) => p.id !== participantId);
-          const me = prev.find(p => p.id === participantId);
-          return me ? [me, ...others] : others;
-        });
+        setIsHost(true);
+        setIsWaitingApproval(false);
+        setParticipants(message.participants);
         break;
       
       case "chat-message":
@@ -220,6 +253,24 @@ export default function Room() {
         ));
         break;
     }
+  };
+
+  const approveParticipant = (targetParticipantId: string) => {
+    wsRef.current?.send(JSON.stringify({
+      type: "approve-participant",
+      roomId,
+      participantId,
+      targetParticipantId,
+    }));
+  };
+
+  const denyParticipant = (targetParticipantId: string) => {
+    wsRef.current?.send(JSON.stringify({
+      type: "deny-participant",
+      roomId,
+      participantId,
+      targetParticipantId,
+    }));
   };
 
   const toggleAudio = async () => {
@@ -449,6 +500,33 @@ export default function Room() {
     return `${hrs.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
+  const copyRoomLink = async () => {
+    const roomLink = `${window.location.origin}/room/${roomId}`;
+    try {
+      await navigator.clipboard.writeText(roomLink);
+      setLinkCopied(true);
+      toast({
+        title: "Link Copied!",
+        description: "Room link has been copied to clipboard",
+      });
+      setTimeout(() => setLinkCopied(false), 2000);
+    } catch (error) {
+      console.error("Failed to copy link:", error);
+      toast({
+        title: "Copy Failed",
+        description: "Could not copy link to clipboard",
+        variant: "destructive",
+      });
+    }
+  };
+
+  if (isWaitingApproval) {
+    return <WaitingRoom roomId={roomId} participantName={participantName} />;
+  }
+
+  const pendingParticipants = participants.filter(p => p.approvalStatus === "pending");
+  const approvedParticipants = participants.filter(p => p.approvalStatus === "approved");
+
   return (
     <div className="h-screen flex flex-col bg-background">
       <header className="h-16 border-b flex items-center justify-between px-6">
@@ -457,6 +535,16 @@ export default function Room() {
           <span className="text-sm text-muted-foreground font-mono" data-testid="text-duration">
             {formatDuration(duration)}
           </span>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={copyRoomLink}
+            className="gap-2"
+            data-testid="button-copy-link"
+          >
+            {linkCopied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+            {linkCopied ? "Copied!" : "Copy Link"}
+          </Button>
         </div>
         
         <div className="flex items-center gap-4">
@@ -476,7 +564,7 @@ export default function Room() {
         <div className="flex-1 flex flex-col">
           <div className="flex-1 p-4 overflow-auto">
             <VideoGrid
-              participants={participants}
+              participants={approvedParticipants}
               localStream={processedStream || localStream}
               screenStream={screenStream}
               currentParticipantId={participantId}
@@ -555,6 +643,29 @@ export default function Room() {
                 <Settings className="w-5 h-5" />
               </Button>
 
+              {isHost && (
+                <div className="relative">
+                  <Button
+                    size="icon"
+                    variant={showJoinRequests ? "default" : "secondary"}
+                    onClick={() => setShowJoinRequests(!showJoinRequests)}
+                    className="rounded-full w-12 h-12"
+                    data-testid="button-toggle-requests"
+                  >
+                    <UserPlus className="w-5 h-5" />
+                  </Button>
+                  {pendingParticipants.length > 0 && (
+                    <Badge
+                      variant="destructive"
+                      className="absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center p-0 text-xs"
+                      data-testid="badge-pending-count"
+                    >
+                      {pendingParticipants.length}
+                    </Badge>
+                  )}
+                </div>
+              )}
+
               <div className="w-px h-8 bg-border mx-2" />
 
               <Button
@@ -591,6 +702,15 @@ export default function Room() {
             onClose={() => setShowSettings(false)}
             onAudioSettingsChange={handleAudioSettingsChange}
             onVideoSettingsChange={handleVideoSettingsChange}
+          />
+        )}
+
+        {showJoinRequests && isHost && (
+          <JoinRequestsPanel
+            pendingParticipants={pendingParticipants}
+            onApprove={approveParticipant}
+            onDeny={denyParticipant}
+            onClose={() => setShowJoinRequests(false)}
           />
         )}
       </div>

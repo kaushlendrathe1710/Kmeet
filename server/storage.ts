@@ -12,6 +12,7 @@ export interface IStorage {
   
   addParticipant(participant: Participant): Promise<void>;
   removeParticipant(roomId: string, participantId: string): Promise<void>;
+  getParticipant(participantId: string): Promise<Participant | undefined>;
   getParticipants(roomId: string): Promise<Participant[]>;
   updateParticipant(participantId: string, updates: Partial<Participant>): Promise<void>;
   
@@ -91,6 +92,10 @@ export class MemStorage implements IStorage {
         await this.deleteRoom(roomId);
       }
     }
+  }
+
+  async getParticipant(participantId: string): Promise<Participant | undefined> {
+    return this.participants.get(participantId);
   }
 
   async getParticipants(roomId: string): Promise<Participant[]> {
