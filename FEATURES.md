@@ -32,6 +32,8 @@ PodcastMeet is a professional video conferencing platform optimized for podcast 
   - Saturation adjustment (0-2x)
 - **Device selection**: Choose from multiple cameras
 - **Visual filters**: Applied via CSS for performance
+- **Hide self-view**: Option to hide your own video from the grid
+- **Keyboard control**: Press 'V' to toggle video on/off
 
 ### 4. Screen Sharing
 - **Full screen sharing**: Share your entire screen or specific windows
@@ -45,6 +47,10 @@ PodcastMeet is a professional video conferencing platform optimized for podcast 
 - **WebM format**: VP9 codec for quality and compression
 - **Instant download**: Save recordings to your device
 - **No server storage**: Privacy-focused client-side recording
+- **Recording countdown**: 3-2-1 countdown before recording starts
+- **Cancellable countdown**: Press ESC to cancel countdown before it starts
+- **Visual overlay**: Full-screen countdown display for recording preparation
+- **Keyboard control**: Press 'R' to toggle recording with countdown
 
 ---
 
@@ -72,6 +78,10 @@ PodcastMeet is a professional video conferencing platform optimized for podcast 
 - **Name display**: Identify participants by name
 - **Join/Leave notifications**: Toast alerts for participant changes
 - **Participant count**: Real-time display of active participants
+- **Remove participant**: Host can remove active participants from the room
+- **Mute all participants**: Host can mute all participants at once (participants can unmute themselves)
+- **Hand raise indicators**: Visual display showing which participants have raised their hand
+- **Host-only controls**: Special controls available only to room hosts
 
 ---
 
@@ -91,6 +101,26 @@ PodcastMeet is a professional video conferencing platform optimized for podcast 
 - **State synchronization**: Keep all participants in sync
 - **Automatic reconnection**: Handle network disruptions
 - **Broadcast messaging**: Send updates to all participants
+- **Hand raise**: Participants can raise their hand to signal they want to speak
+- **Emoji reactions**: Send emoji reactions with floating CSS animations
+- **Reaction picker**: Choose from common emoji reactions (👍 ❤️ 😂 👏 🎉)
+- **Visual feedback**: Emoji animations float across the screen
+
+---
+
+## ⌨️ Keyboard Shortcuts
+
+### Comprehensive Keyboard Controls
+- **M key**: Toggle microphone on/off
+- **V key**: Toggle video on/off
+- **S key**: Toggle screen sharing on/off
+- **R key**: Toggle recording (with 3-2-1 countdown)
+- **C key**: Toggle chat panel
+- **P key**: Toggle participants panel
+- **H key**: Raise/lower hand
+- **F key**: Toggle fullscreen mode
+- **ESC key**: Cancel recording countdown (when active)
+- **Works anywhere**: Shortcuts active except when typing in text fields
 
 ---
 

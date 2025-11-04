@@ -8,6 +8,34 @@ PodcastMeet is a professional video conferencing platform specifically designed 
 
 Preferred communication style: Simple, everyday language.
 
+## Recent Changes (November 4, 2025)
+
+**Seven New Features Implemented and Verified:**
+
+1. **Remove Active Participant** - Host can remove participants already in the room with server-side authorization
+2. **Comprehensive Keyboard Shortcuts** - Full keyboard control (M/V/S/R/C/P/H/F/ESC keys)
+3. **Hand Raise Feature** - Participants can signal they want to speak with visual indicators
+4. **Emoji Reactions** - Floating emoji animations using CSS keyframes (👍 ❤️ 😂 👏 🎉)
+5. **Recording Countdown** - 3-2-1 countdown with full-screen overlay, ESC to cancel
+6. **Hide Self-View** - Option to hide local participant from video grid
+7. **Mute All Participants** - Host can mute everyone using recoverable track.enabled method
+
+**Critical Fixes Applied:**
+- Mute-all now uses `track.enabled = false` instead of stopping tracks (participants can unmute themselves)
+- Recording countdown properly integrates with keyboard shortcuts via forwardRef
+- Countdown cancellation uses guard flag to abort async recording start
+- Emoji reactions use performant CSS animations instead of 60fps React re-renders
+- Keyboard event handler includes `recordingCountdown` in dependencies to fix stale closure
+
+**New Components:**
+- `emoji-reaction.tsx` - CSS-based floating emoji animation component
+- Updated `RecordingControls` to forwardRef with `toggleRecording` and `cancelCountdown` methods
+
+**Architecture Patterns:**
+- Centralized state management with ref-based coordination between keyboard shortcuts and UI controls
+- Host authorization validation on all privileged operations (remove, mute-all)
+- WebSocket message handlers for real-time state synchronization (hand raise, emoji reactions, mute-all)
+
 ## Documentation
 
 **Project Documentation Files:**
