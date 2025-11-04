@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { useRoute, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Mic, MicOff, Video, VideoOff, Monitor, MonitorOff, MessageSquare, Users, Settings, Phone, Radio, Copy, Check, UserPlus, Hand, Smile, Grid3x3, UserCircle, Lock, LockOpen, ArrowRightLeft } from "lucide-react";
+import { Mic, MicOff, Video, VideoOff, Monitor, MonitorOff, MessageSquare, Users, Settings, Phone, Radio, Copy, Check, UserPlus, Hand, Smile, Grid3x3, UserCircle, Lock, LockOpen, ArrowRightLeft, Maximize, Minimize } from "lucide-react";
 import { VideoGrid, type ViewMode } from "@/components/video-grid";
 import { ChatPanel } from "@/components/chat-panel";
 import { ParticipantsPanel } from "@/components/participants-panel";
@@ -56,7 +56,9 @@ export default function Room() {
   const [pinnedParticipantId, setPinnedParticipantId] = useState<string | null>(null);
   const [isRoomLocked, setIsRoomLocked] = useState(false);
   const [showTransferHost, setShowTransferHost] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
   const recordingControlsRef = useRef<{ toggleRecording: () => void; cancelCountdown: () => void; pauseRecording: () => void; resumeRecording: () => void } | null>(null);
+  const roomContainerRef = useRef<HTMLDivElement | null>(null);
   
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -146,11 +148,7 @@ export default function Room() {
           toggleHandRaise();
           break;
         case 'f':
-          if (document.fullscreenElement) {
-            document.exitFullscreen();
-          } else {
-            document.documentElement.requestFullscreen();
-          }
+          toggleFullscreen();
           break;
       }
     };
@@ -158,6 +156,15 @@ export default function Room() {
     window.addEventListener('keydown', handleKeyPress);
     return () => window.removeEventListener('keydown', handleKeyPress);
   }, [isRecording, isAudioEnabled, isVideoEnabled, isScreenSharing, recordingCountdown]);
+
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
+  }, []);
 
   const initializeMedia = async () => {
     try {
@@ -734,6 +741,27 @@ export default function Room() {
     setLocation("/");
   };
 
+  const toggleFullscreen = async () => {
+    if (!document.fullscreenElement) {
+      try {
+        await roomContainerRef.current?.requestFullscreen();
+      } catch (err) {
+        console.error("Error attempting to enable fullscreen:", err);
+        toast({
+          title: "Fullscreen Error",
+          description: "Could not enter fullscreen mode",
+          variant: "destructive",
+        });
+      }
+    } else {
+      try {
+        await document.exitFullscreen();
+      } catch (err) {
+        console.error("Error attempting to exit fullscreen:", err);
+      }
+    }
+  };
+
   const cleanup = () => {
     localStream?.getTracks().forEach(track => track.stop());
     screenStream?.getTracks().forEach(track => track.stop());
@@ -783,7 +811,7 @@ export default function Room() {
   const approvedParticipants = participants.filter(p => p.approvalStatus === "approved");
 
   return (
-    <div className="h-screen flex flex-col bg-background">
+    <div ref={roomContainerRef} className="h-screen flex flex-col bg-background">
       <header className="h-16 border-b flex items-center justify-between px-6">
         <div className="flex items-center gap-4">
           <h1 className="text-xl font-semibold" data-testid="text-room-name">Room: {roomId}</h1>
@@ -948,6 +976,17 @@ export default function Room() {
                 title={viewMode === "grid" ? "Switch to Speaker View" : "Switch to Grid View"}
               >
                 {viewMode === "grid" ? <UserCircle className="w-5 h-5" /> : <Grid3x3 className="w-5 h-5" />}
+              </Button>
+
+              <Button
+                size="icon"
+                variant={isFullscreen ? "default" : "secondary"}
+                onClick={toggleFullscreen}
+                className="rounded-full w-12 h-12"
+                data-testid="button-toggle-fullscreen"
+                title={isFullscreen ? "Exit Fullscreen (F)" : "Enter Fullscreen (F)"}
+              >
+                {isFullscreen ? <Minimize className="w-5 h-5" /> : <Maximize className="w-5 h-5" />}
               </Button>
 
               <Button
