@@ -23,20 +23,39 @@ export async function registerRoutes(app: Express): Promise<Server> {
       try {
         const message: WSMessage = JSON.parse(data.toString());
         
+        // Guard: Block messages from clients that haven't successfully joined (no participantId)
+        // Exception: Allow join-room messages to pass through for initial connection
+        if (message.type !== 'join-room' && !ws.participantId) {
+          console.log(`Blocked message from unregistered client: ${message.type}`);
+          return;
+        }
+        
         switch (message.type) {
           case 'join-room': {
             const { roomId, participantId, participantName } = message;
             
-            ws.participantId = participantId;
-            ws.roomId = roomId;
-            clients.set(participantId, ws);
-
             let room = await storage.getRoom(roomId);
             const isHost = !room;
             
             if (!room) {
               room = await storage.createRoom(roomId, participantId);
             }
+
+            // Check if room is locked (non-host cannot join)
+            if (!isHost && room.isLocked) {
+              ws.send(JSON.stringify({
+                type: 'room-locked-error',
+                message: 'This room is locked and not accepting new participants',
+              }));
+              console.log(`Participant ${participantName} tried to join locked room ${roomId} - connection will be closed`);
+              ws.close();
+              break;
+            }
+
+            // Register client after lock check passes
+            ws.participantId = participantId;
+            ws.roomId = roomId;
+            clients.set(participantId, ws);
 
             const participant: Participant = {
               id: participantId,
@@ -47,6 +66,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               isScreenSharing: false,
               isHost,
               approvalStatus: isHost ? "approved" : "pending",
+              handRaised: false,
               joinedAt: Date.now(),
             };
 
@@ -419,6 +439,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
             });
 
             console.log(`Host ${participantId} muted all participants in room ${roomId}`);
+            break;
+          }
+
+          case 'lock-room': {
+            const { roomId, participantId, isLocked } = message;
+            
+            const requester = await storage.getParticipant(participantId);
+            if (!requester || !requester.isHost) {
+              console.log(`Unauthorized lock-room attempt by ${participantId}`);
+              ws.send(JSON.stringify({
+                type: 'error',
+                message: 'Only the host can lock/unlock the room',
+              }));
+              break;
+            }
+            
+            await storage.updateRoom(roomId, { isLocked });
+            
+            broadcastToRoom(roomId, '', {
+              type: 'room-locked',
+              roomId,
+              isLocked,
+            });
+
+            console.log(`Host ${participantId} ${isLocked ? 'locked' : 'unlocked'} room ${roomId}`);
             break;
           }
         }

@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { useRoute, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Mic, MicOff, Video, VideoOff, Monitor, MonitorOff, MessageSquare, Users, Settings, Phone, Radio, Copy, Check, UserPlus, Hand, Smile, Grid3x3, UserCircle } from "lucide-react";
+import { Mic, MicOff, Video, VideoOff, Monitor, MonitorOff, MessageSquare, Users, Settings, Phone, Radio, Copy, Check, UserPlus, Hand, Smile, Grid3x3, UserCircle, Lock, LockOpen } from "lucide-react";
 import { VideoGrid, type ViewMode } from "@/components/video-grid";
 import { ChatPanel } from "@/components/chat-panel";
 import { ParticipantsPanel } from "@/components/participants-panel";
@@ -47,6 +47,7 @@ export default function Room() {
   const [hideSelfView, setHideSelfView] = useState(false);
   const [viewMode, setViewMode] = useState<"grid" | "speaker">("grid");
   const [pinnedParticipantId, setPinnedParticipantId] = useState<string | null>(null);
+  const [isRoomLocked, setIsRoomLocked] = useState(false);
   const recordingControlsRef = useRef<{ toggleRecording: () => void; cancelCountdown: () => void } | null>(null);
   
   const [participants, setParticipants] = useState<Participant[]>([]);
@@ -371,6 +372,25 @@ export default function Room() {
           });
         }
         break;
+
+      case "room-locked":
+        setIsRoomLocked(message.isLocked);
+        toast({
+          title: message.isLocked ? "Room Locked" : "Room Unlocked",
+          description: message.isLocked 
+            ? "The room is now locked. New participants cannot join."
+            : "The room is now unlocked. New participants can join.",
+        });
+        break;
+
+      case "room-locked-error":
+        toast({
+          title: "Room is Locked",
+          description: message.message,
+          variant: "destructive",
+        });
+        setTimeout(() => setLocation("/"), 2000);
+        break;
     }
   };
 
@@ -633,6 +653,19 @@ export default function Room() {
       title: "Mute All",
       description: "All participants have been muted",
     });
+  };
+
+  const toggleRoomLock = () => {
+    if (!isHost) return;
+    
+    const newLockedState = !isRoomLocked;
+    
+    wsRef.current?.send(JSON.stringify({
+      type: "lock-room",
+      roomId,
+      participantId,
+      isLocked: newLockedState,
+    }));
   };
 
   const sendMessage = (message: string) => {
@@ -903,6 +936,19 @@ export default function Room() {
                     </Badge>
                   )}
                 </div>
+              )}
+
+              {isHost && (
+                <Button
+                  size="icon"
+                  variant={isRoomLocked ? "default" : "secondary"}
+                  onClick={toggleRoomLock}
+                  className="rounded-full w-12 h-12"
+                  data-testid="button-toggle-lock"
+                  title={isRoomLocked ? "Unlock Room" : "Lock Room"}
+                >
+                  {isRoomLocked ? <Lock className="w-5 h-5" /> : <LockOpen className="w-5 h-5" />}
+                </Button>
               )}
 
               <div className="w-px h-8 bg-border mx-2" />

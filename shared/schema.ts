@@ -24,6 +24,7 @@ export const roomSchema = z.object({
   createdAt: z.number(),
   hostId: z.string().optional(),
   participants: z.array(z.string()).default([]),
+  isLocked: z.boolean().default(false),
 });
 
 export type Room = z.infer<typeof roomSchema>;
@@ -146,6 +147,17 @@ export const wsMessageSchema = z.discriminatedUnion("type", [
     type: z.literal("mute-all"),
     roomId: z.string(),
     participantId: z.string(),
+  }),
+  z.object({
+    type: z.literal("lock-room"),
+    roomId: z.string(),
+    participantId: z.string(),
+    isLocked: z.boolean(),
+  }),
+  z.object({
+    type: z.literal("room-locked"),
+    roomId: z.string(),
+    isLocked: z.boolean(),
   }),
 ]);
 

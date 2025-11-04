@@ -8,6 +8,7 @@ export interface IStorage {
   
   createRoom(roomId: string, hostId: string): Promise<Room>;
   getRoom(roomId: string): Promise<Room | undefined>;
+  updateRoom(roomId: string, updates: Partial<Room>): Promise<void>;
   deleteRoom(roomId: string): Promise<void>;
   
   addParticipant(participant: Participant): Promise<void>;
@@ -57,6 +58,7 @@ export class MemStorage implements IStorage {
       createdAt: Date.now(),
       hostId,
       participants: [],
+      isLocked: false,
     };
     this.rooms.set(roomId, room);
     this.messages.set(roomId, []);
@@ -65,6 +67,13 @@ export class MemStorage implements IStorage {
 
   async getRoom(roomId: string): Promise<Room | undefined> {
     return this.rooms.get(roomId);
+  }
+
+  async updateRoom(roomId: string, updates: Partial<Room>): Promise<void> {
+    const room = this.rooms.get(roomId);
+    if (room) {
+      this.rooms.set(roomId, { ...room, ...updates });
+    }
   }
 
   async deleteRoom(roomId: string): Promise<void> {
