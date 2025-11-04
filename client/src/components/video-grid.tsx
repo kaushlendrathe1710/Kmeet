@@ -11,11 +11,16 @@ interface VideoGridProps {
   currentParticipantId: string;
   videoSettings?: VideoSettings;
   remoteStreams?: Map<string, MediaStream>;
+  hideSelfView?: boolean;
 }
 
-export function VideoGrid({ participants, localStream, screenStream, currentParticipantId, videoSettings, remoteStreams }: VideoGridProps) {
+export function VideoGrid({ participants, localStream, screenStream, currentParticipantId, videoSettings, remoteStreams, hideSelfView = false }: VideoGridProps) {
+  const visibleParticipants = hideSelfView 
+    ? participants.filter(p => p.id !== currentParticipantId)
+    : participants;
+
   const getGridClass = () => {
-    const count = participants.length + (screenStream ? 1 : 0);
+    const count = visibleParticipants.length + (screenStream ? 1 : 0);
     
     if (count === 1) return "grid-cols-1";
     if (count === 2) return "grid-cols-2";
@@ -35,7 +40,7 @@ export function VideoGrid({ participants, localStream, screenStream, currentPart
         />
       )}
       
-      {participants.map((participant) => {
+      {visibleParticipants.map((participant) => {
         const stream = participant.id === currentParticipantId 
           ? localStream 
           : remoteStreams?.get(participant.id) || null;

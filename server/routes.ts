@@ -404,6 +404,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
             console.log(`Participant ${participantName} sent ${emoji} reaction in room ${roomId}`);
             break;
           }
+
+          case 'mute-all': {
+            const { roomId, participantId } = message;
+            
+            const requester = await storage.getParticipant(participantId);
+            if (!requester || !requester.isHost) {
+              console.log(`Unauthorized mute-all attempt by ${participantId}`);
+              break;
+            }
+            
+            broadcastToRoom(roomId, participantId, {
+              type: 'mute-all-command',
+            });
+
+            console.log(`Host ${participantId} muted all participants in room ${roomId}`);
+            break;
+          }
         }
       } catch (error) {
         console.error('Error handling WebSocket message:', error);

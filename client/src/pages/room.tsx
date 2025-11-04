@@ -43,6 +43,9 @@ export default function Room() {
   const [isWaitingApproval, setIsWaitingApproval] = useState(false);
   const [isHost, setIsHost] = useState(false);
   const [reactions, setReactions] = useState<Array<{ id: string; emoji: string }>>([]);
+  const [recordingCountdown, setRecordingCountdown] = useState<number | null>(null);
+  const [hideSelfView, setHideSelfView] = useState(false);
+  const recordingControlsRef = useRef<{ toggleRecording: () => void; cancelCountdown: () => void } | null>(null);
   
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -92,6 +95,11 @@ export default function Room() {
 
       const key = e.key.toLowerCase();
       
+      if (key === 'escape' && recordingCountdown !== null) {
+        recordingControlsRef.current?.cancelCountdown();
+        return;
+      }
+      
       switch (key) {
         case 'm':
           toggleAudio();
@@ -103,11 +111,7 @@ export default function Room() {
           toggleScreenShare();
           break;
         case 'r':
-          if (isRecording) {
-            stopRecording();
-          } else {
-            startRecording();
-          }
+          recordingControlsRef.current?.toggleRecording();
           break;
         case 'c':
           setShowChat(prev => !prev);
@@ -130,7 +134,7 @@ export default function Room() {
 
     window.addEventListener('keydown', handleKeyPress);
     return () => window.removeEventListener('keydown', handleKeyPress);
-  }, [isRecording, isAudioEnabled, isVideoEnabled, isScreenSharing]);
+  }, [isRecording, isAudioEnabled, isVideoEnabled, isScreenSharing, recordingCountdown]);
 
   const initializeMedia = async () => {
     try {
@@ -340,6 +344,30 @@ export default function Room() {
       case "emoji-reaction":
         const reactionId = `${message.participantId}-${Date.now()}`;
         setReactions(prev => [...prev, { id: reactionId, emoji: message.emoji }]);
+        break;
+      
+      case "mute-all-command":
+        if (!isHost && isAudioEnabled) {
+          localStream?.getAudioTracks().forEach(track => {
+            track.enabled = false;
+          });
+          processedStream?.getAudioTracks().forEach(track => {
+            track.enabled = false;
+          });
+          setIsAudioEnabled(false);
+          
+          wsRef.current?.send(JSON.stringify({
+            type: "toggle-audio",
+            roomId,
+            participantId,
+            isEnabled: false,
+          }));
+          
+          toast({
+            title: "Muted by Host",
+            description: "The host has muted all participants. You can unmute yourself.",
+          });
+        }
         break;
     }
   };
@@ -590,6 +618,21 @@ export default function Room() {
     setReactions(prev => prev.filter(r => r.id !== id));
   };
 
+  const muteAllParticipants = () => {
+    if (!isHost) return;
+    
+    wsRef.current?.send(JSON.stringify({
+      type: "mute-all",
+      roomId,
+      participantId,
+    }));
+    
+    toast({
+      title: "Mute All",
+      description: "All participants have been muted",
+    });
+  };
+
   const sendMessage = (message: string) => {
     wsRef.current?.send(JSON.stringify({
       type: "chat-message",
@@ -702,6 +745,7 @@ export default function Room() {
               currentParticipantId={participantId}
               videoSettings={videoSettings}
               remoteStreams={remoteStreams}
+              hideSelfView={hideSelfView}
             />
           </div>
 
@@ -779,9 +823,11 @@ export default function Room() {
               </DropdownMenu>
 
               <RecordingControls
+                ref={recordingControlsRef}
                 isRecording={isRecording}
                 onToggleRecording={() => setIsRecording(!isRecording)}
                 localStream={processedStream || localStream}
+                onCountdownChange={setRecordingCountdown}
               />
 
               <div className="w-px h-8 bg-border mx-2" />
@@ -894,6 +940,14 @@ export default function Room() {
           reactions={reactions}
           onReactionComplete={removeReaction}
         />
+
+        {recordingCountdown !== null && (
+          <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 pointer-events-none">
+            <div className="text-9xl font-bold text-white animate-pulse" data-testid="countdown-overlay">
+              {recordingCountdown}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

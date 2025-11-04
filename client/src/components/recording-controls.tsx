@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect, useImperativeHandle, forwardRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Radio, Square, Download, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
@@ -8,12 +8,27 @@ interface RecordingControlsProps {
   isRecording: boolean;
   onToggleRecording: () => void;
   localStream: MediaStream | null;
+  onCountdownChange?: (countdown: number | null) => void;
 }
 
-export function RecordingControls({ isRecording, onToggleRecording, localStream }: RecordingControlsProps) {
-  const { toast } = useToast();
-  const [isProcessing, setIsProcessing] = useState(false);
-  const recorderRef = useRef<RecordRTCPromisesHandler | null>(null);
+export interface RecordingControlsHandle {
+  toggleRecording: () => void;
+  cancelCountdown: () => void;
+}
+
+export const RecordingControls = forwardRef<RecordingControlsHandle, RecordingControlsProps>(
+  ({ isRecording, onToggleRecording, localStream, onCountdownChange }, ref) => {
+    const { toast } = useToast();
+    const [isProcessing, setIsProcessing] = useState(false);
+    const [countdown, setCountdown] = useState<number | null>(null);
+    const recorderRef = useRef<RecordRTCPromisesHandler | null>(null);
+    const countdownCancelledRef = useRef(false);
+
+    useEffect(() => {
+      if (countdown !== null && onCountdownChange) {
+        onCountdownChange(countdown);
+      }
+    }, [countdown, onCountdownChange]);
 
   const startRecording = async () => {
     if (!localStream) {
@@ -23,6 +38,25 @@ export function RecordingControls({ isRecording, onToggleRecording, localStream 
         variant: "destructive",
       });
       return;
+    }
+
+    countdownCancelledRef.current = false;
+    
+    setCountdown(3);
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    if (countdownCancelledRef.current) return;
+    
+    setCountdown(2);
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    if (countdownCancelledRef.current) return;
+    
+    setCountdown(1);
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    if (countdownCancelledRef.current) return;
+    
+    setCountdown(null);
+    if (onCountdownChange) {
+      onCountdownChange(null);
     }
 
     try {
@@ -44,6 +78,10 @@ export function RecordingControls({ isRecording, onToggleRecording, localStream 
       });
     } catch (error) {
       console.error("Error starting recording:", error);
+      setCountdown(null);
+      if (onCountdownChange) {
+        onCountdownChange(null);
+      }
       toast({
         title: "Recording Error",
         description: "Failed to start recording. Please try again.",
@@ -87,6 +125,8 @@ export function RecordingControls({ isRecording, onToggleRecording, localStream 
   };
 
   const handleToggle = () => {
+    if (countdown !== null) return;
+    
     if (isRecording) {
       stopRecording();
     } else {
@@ -94,17 +134,36 @@ export function RecordingControls({ isRecording, onToggleRecording, localStream 
     }
   };
 
+  const cancelCountdown = () => {
+    countdownCancelledRef.current = true;
+    setCountdown(null);
+    if (onCountdownChange) {
+      onCountdownChange(null);
+    }
+    toast({
+      title: "Countdown Cancelled",
+      description: "Recording has been cancelled",
+    });
+  };
+
+  useImperativeHandle(ref, () => ({
+    toggleRecording: handleToggle,
+    cancelCountdown
+  }));
+
   return (
     <Button
       size="icon"
       variant={isRecording ? "destructive" : "secondary"}
       onClick={handleToggle}
-      disabled={isProcessing}
+      disabled={isProcessing || countdown !== null}
       className="rounded-full w-12 h-12"
       data-testid="button-toggle-recording"
     >
       {isProcessing ? (
         <Loader2 className="w-5 h-5 animate-spin" />
+      ) : countdown !== null ? (
+        <span className="text-lg font-bold">{countdown}</span>
       ) : isRecording ? (
         <Square className="w-5 h-5" />
       ) : (
@@ -112,4 +171,4 @@ export function RecordingControls({ isRecording, onToggleRecording, localStream 
       )}
     </Button>
   );
-}
+});

@@ -1,51 +1,37 @@
-import { useEffect, useState } from "react";
-
 interface EmojiReactionProps {
   emoji: string;
   onComplete: () => void;
+  startPosition: number;
 }
 
-export function EmojiReaction({ emoji, onComplete }: EmojiReactionProps) {
-  const [position, setPosition] = useState({
-    left: Math.random() * 80 + 10,
-    bottom: 10,
-  });
-
-  useEffect(() => {
-    const duration = 3000;
-    const startTime = Date.now();
-
-    const animate = () => {
-      const elapsed = Date.now() - startTime;
-      const progress = elapsed / duration;
-
-      if (progress >= 1) {
-        onComplete();
-        return;
-      }
-
-      setPosition(prev => ({
-        left: prev.left + (Math.random() - 0.5) * 2,
-        bottom: 10 + progress * 80,
-      }));
-
-      requestAnimationFrame(animate);
-    };
-
-    requestAnimationFrame(animate);
-  }, [onComplete]);
-
+export function EmojiReaction({ emoji, onComplete, startPosition }: EmojiReactionProps) {
   return (
     <div
-      className="fixed text-6xl pointer-events-none transition-opacity duration-500"
+      className="fixed text-6xl pointer-events-none animate-float-up"
       style={{
-        left: `${position.left}%`,
-        bottom: `${position.bottom}%`,
-        opacity: 1 - (position.bottom - 10) / 80,
+        left: `${startPosition}%`,
+        bottom: '10%',
+        animation: 'floatUp 3s ease-out forwards',
       }}
+      onAnimationEnd={onComplete}
       data-testid="floating-emoji"
     >
       {emoji}
+      <style>{`
+        @keyframes floatUp {
+          0% {
+            opacity: 1;
+            transform: translateY(0) translateX(0);
+          }
+          100% {
+            opacity: 0;
+            transform: translateY(-70vh) translateX(${(Math.random() - 0.5) * 100}px);
+          }
+        }
+        .animate-float-up {
+          animation: floatUp 3s ease-out forwards;
+        }
+      `}</style>
     </div>
   );
 }
@@ -58,10 +44,11 @@ interface EmojiReactionsContainerProps {
 export function EmojiReactionsContainer({ reactions, onReactionComplete }: EmojiReactionsContainerProps) {
   return (
     <div className="fixed inset-0 pointer-events-none z-50">
-      {reactions.map(reaction => (
+      {reactions.map((reaction, index) => (
         <EmojiReaction
           key={reaction.id}
           emoji={reaction.emoji}
+          startPosition={(index * 15 + Math.random() * 20 + 20) % 80}
           onComplete={() => onReactionComplete(reaction.id)}
         />
       ))}
