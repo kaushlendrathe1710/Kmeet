@@ -1,7 +1,7 @@
 import * as React from "react";
 import { useState, useRef, useEffect, useImperativeHandle, forwardRef } from "react";
 import { Button } from "@/components/ui/button";
-import { Radio, Square, Download, Loader2, Music } from "lucide-react";
+import { Radio, Square, Download, Loader2, Music, Play, Pause } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import RecordRTC, { RecordRTCPromisesHandler } from "recordrtc";
 import type { Participant } from "@shared/schema";
@@ -19,6 +19,8 @@ interface RecordingControlsProps {
 export interface RecordingControlsHandle {
   toggleRecording: () => void;
   cancelCountdown: () => void;
+  pauseRecording: () => void;
+  resumeRecording: () => void;
 }
 
 interface TrackRecording {
@@ -39,14 +41,20 @@ const RecordingControls = forwardRef(
     const [isProcessing, setIsProcessing] = useState(false);
     const [countdown, setCountdown] = useState<number | null>(null);
     const [trackCount, setTrackCount] = useState(0);
+    const [isPaused, setIsPaused] = useState(false);
     const trackRecordingsRef = useRef<Map<string, TrackRecording>>(new Map());
     const completedTracksRef = useRef<CompletedTrack[]>([]);
     const countdownCancelledRef = useRef(false);
     const isRecordingRef = useRef(false);
+    const isPausedRef = useRef(false);
 
     useEffect(() => {
       isRecordingRef.current = isRecording;
     }, [isRecording]);
+
+    useEffect(() => {
+      isPausedRef.current = isPaused;
+    }, [isPaused]);
 
     useEffect(() => {
       if (countdown !== null && onCountdownChange) {
@@ -77,6 +85,13 @@ const RecordingControls = forwardRef(
           });
 
           await remoteRecorder.startRecording();
+          
+          // If recording is paused, immediately pause this new recorder to match global state
+          if (isPausedRef.current) {
+            await remoteRecorder.pauseRecording();
+            console.log(`New participant ${participant?.name} recorder started in paused state (matching global pause)`);
+          }
+          
           trackRecordingsRef.current.set(participantId, {
             recorder: remoteRecorder,
             participantId,
@@ -304,6 +319,7 @@ const RecordingControls = forwardRef(
       trackRecordingsRef.current.clear();
       completedTracksRef.current = [];
       setTrackCount(0);
+      setIsPaused(false);
       onToggleRecording();
       
       if (downloadedTracks === 0) {
@@ -323,6 +339,7 @@ const RecordingControls = forwardRef(
       trackRecordingsRef.current.clear();
       completedTracksRef.current = [];
       setTrackCount(0);
+      setIsPaused(false);
       onToggleRecording();
       toast({
         title: "Recording Error",
@@ -356,9 +373,71 @@ const RecordingControls = forwardRef(
     });
   };
 
+  const pauseRecording = async () => {
+    if (!isRecording || isPaused) return;
+
+    try {
+      // Update ref immediately to prevent race condition with participant joins
+      isPausedRef.current = true;
+      setIsPaused(true);
+      
+      const trackEntries = Array.from(trackRecordingsRef.current.values());
+      for (const trackRecording of trackEntries) {
+        await trackRecording.recorder.pauseRecording();
+      }
+      
+      toast({
+        title: "Recording Paused",
+        description: "All tracks have been paused",
+      });
+    } catch (error) {
+      console.error("Error pausing recording:", error);
+      // Rollback on error
+      isPausedRef.current = false;
+      setIsPaused(false);
+      toast({
+        title: "Pause Error",
+        description: "Failed to pause recording",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const resumeRecording = async () => {
+    if (!isRecording || !isPaused) return;
+
+    try {
+      // Update ref immediately to prevent race condition with participant joins
+      isPausedRef.current = false;
+      setIsPaused(false);
+      
+      const trackEntries = Array.from(trackRecordingsRef.current.values());
+      for (const trackRecording of trackEntries) {
+        await trackRecording.recorder.resumeRecording();
+      }
+      
+      toast({
+        title: "Recording Resumed",
+        description: "All tracks have been resumed",
+      });
+    } catch (error) {
+      console.error("Error resuming recording:", error);
+      // Rollback on error
+      isPausedRef.current = true;
+      setIsPaused(true);
+      toast({
+        title: "Resume Error",
+        description: "Failed to resume recording",
+        variant: "destructive",
+      });
+    }
+  };
+
   useImperativeHandle(ref, () => ({
     toggleRecording: handleToggle,
-    cancelCountdown
+    cancelCountdown,
+    pauseRecording,
+    resumeRecording
   }));
 
   return (
@@ -386,6 +465,23 @@ const RecordingControls = forwardRef(
           <Music className="w-4 h-4 text-destructive" />
           <span className="text-sm font-medium text-destructive">{trackCount} tracks</span>
         </div>
+      )}
+      {isRecording && (
+        <Button
+          size="icon"
+          variant="secondary"
+          onClick={isPaused ? resumeRecording : pauseRecording}
+          disabled={isProcessing}
+          className="rounded-full w-12 h-12"
+          data-testid="button-pause-resume-recording"
+          title={isPaused ? "Resume Recording" : "Pause Recording"}
+        >
+          {isPaused ? (
+            <Play className="w-5 h-5" />
+          ) : (
+            <Pause className="w-5 h-5" />
+          )}
+        </Button>
       )}
     </div>
   );

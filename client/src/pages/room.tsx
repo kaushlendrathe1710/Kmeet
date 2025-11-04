@@ -48,7 +48,7 @@ export default function Room() {
   const [viewMode, setViewMode] = useState<"grid" | "speaker">("grid");
   const [pinnedParticipantId, setPinnedParticipantId] = useState<string | null>(null);
   const [isRoomLocked, setIsRoomLocked] = useState(false);
-  const recordingControlsRef = useRef<{ toggleRecording: () => void; cancelCountdown: () => void } | null>(null);
+  const recordingControlsRef = useRef<{ toggleRecording: () => void; cancelCountdown: () => void; pauseRecording: () => void; resumeRecording: () => void } | null>(null);
   
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -120,7 +120,19 @@ export default function Room() {
           setShowChat(prev => !prev);
           break;
         case 'p':
-          setShowParticipants(prev => !prev);
+          if (isRecording) {
+            // When recording, P pauses (no-op if already paused)
+            recordingControlsRef.current?.pauseRecording();
+          } else {
+            // When not recording, P toggles participants panel
+            setShowParticipants(prev => !prev);
+          }
+          break;
+        case 'u':
+          // U resumes recording when paused
+          if (isRecording) {
+            recordingControlsRef.current?.resumeRecording();
+          }
           break;
         case 'h':
           toggleHandRaise();
