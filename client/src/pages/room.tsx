@@ -746,6 +746,7 @@ export default function Room() {
               videoSettings={videoSettings}
               remoteStreams={remoteStreams}
               hideSelfView={hideSelfView}
+              peers={peersRef.current}
             />
           </div>
 

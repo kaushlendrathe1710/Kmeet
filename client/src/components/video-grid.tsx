@@ -6,6 +6,8 @@ import type { VideoSettings } from "./settings-panel";
 import { useAudioLevel } from "@/hooks/use-audio-level";
 import { AudioLevelMeter } from "@/components/audio-level-meter";
 import { useActiveSpeaker, type ParticipantAudioLevel } from "@/hooks/use-active-speaker";
+import { useConnectionQuality } from "@/hooks/use-connection-quality";
+import { NetworkIndicator } from "@/components/network-indicator";
 
 interface VideoGridProps {
   participants: Participant[];
@@ -15,9 +17,10 @@ interface VideoGridProps {
   videoSettings?: VideoSettings;
   remoteStreams?: Map<string, MediaStream>;
   hideSelfView?: boolean;
+  peers?: Map<string, any>;
 }
 
-export function VideoGrid({ participants, localStream, screenStream, currentParticipantId, videoSettings, remoteStreams, hideSelfView = false }: VideoGridProps) {
+export function VideoGrid({ participants, localStream, screenStream, currentParticipantId, videoSettings, remoteStreams, hideSelfView = false, peers }: VideoGridProps) {
   const [participantLevels, setParticipantLevels] = useState<ParticipantAudioLevel[]>([]);
   const activeSpeakerId = useActiveSpeaker(participantLevels);
 
@@ -66,6 +69,10 @@ export function VideoGrid({ participants, localStream, screenStream, currentPart
         const stream = participant.id === currentParticipantId 
           ? localStream 
           : remoteStreams?.get(participant.id) || null;
+        const peer = participant.id !== currentParticipantId 
+          ? peers?.get(participant.id) 
+          : null;
+        const peerConnection = peer?._pc || null;
         
         return (
           <VideoTile
@@ -76,6 +83,7 @@ export function VideoGrid({ participants, localStream, screenStream, currentPart
             videoSettings={participant.id === currentParticipantId ? videoSettings : undefined}
             isActiveSpeaker={participant.id === activeSpeakerId}
             onAudioLevelChange={handleAudioLevelChange}
+            peerConnection={peerConnection}
           />
         );
       })}
@@ -90,11 +98,13 @@ interface VideoTileProps {
   videoSettings?: VideoSettings;
   isActiveSpeaker: boolean;
   onAudioLevelChange: (participantId: string, level: number) => void;
+  peerConnection?: any;
 }
 
-function VideoTile({ participant, stream, isSelf, videoSettings, isActiveSpeaker, onAudioLevelChange }: VideoTileProps) {
+function VideoTile({ participant, stream, isSelf, videoSettings, isActiveSpeaker, onAudioLevelChange, peerConnection }: VideoTileProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const audioLevel = useAudioLevel(stream, participant.isAudioEnabled);
+  const connectionStats = useConnectionQuality(peerConnection);
 
   // Report audio level changes to parent
   useEffect(() => {
@@ -164,9 +174,12 @@ function VideoTile({ participant, stream, isSelf, videoSettings, isActiveSpeaker
 
       <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 to-transparent p-4">
         <div className="flex items-center justify-between mb-2">
-          <span className="text-white text-sm font-medium" data-testid={`participant-name-${participant.id}`}>
-            {participant.name} {isSelf && "(You)"}
-          </span>
+          <div className="flex items-center gap-2">
+            <span className="text-white text-sm font-medium" data-testid={`participant-name-${participant.id}`}>
+              {participant.name} {isSelf && "(You)"}
+            </span>
+            {!isSelf && <NetworkIndicator quality={connectionStats.quality} />}
+          </div>
           
           {!participant.isAudioEnabled && (
             <div className="bg-destructive rounded-full p-1" data-testid={`audio-muted-${participant.id}`}>
