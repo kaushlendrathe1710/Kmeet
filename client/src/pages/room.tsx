@@ -222,46 +222,160 @@ export default function Room() {
     }
   };
 
-  const toggleAudio = () => {
-    if (localStream) {
-      const audioTrack = localStream.getAudioTracks()[0];
-      if (audioTrack) {
-        audioTrack.enabled = !isAudioEnabled;
-        setIsAudioEnabled(!isAudioEnabled);
+  const toggleAudio = async () => {
+    const newAudioState = !isAudioEnabled;
+    setIsAudioEnabled(newAudioState);
+
+    if (newAudioState) {
+      try {
+        console.log("🎤 Requesting microphone access...");
+        const audioStream = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            sampleRate: 48000,
+          },
+        });
+
+        const audioTrack = audioStream.getAudioTracks()[0];
+        console.log("✅ Microphone turned ON - new audio track created:", audioTrack.id);
         
-        wsRef.current?.send(JSON.stringify({
-          type: "toggle-audio",
-          roomId,
-          participantId,
-          isEnabled: !isAudioEnabled,
-        }));
-        
-        setParticipants(prev => prev.map(p => 
-          p.id === participantId ? { ...p, isAudioEnabled: !isAudioEnabled } : p
-        ));
+        if (localStream) {
+          const oldAudioTrack = localStream.getAudioTracks()[0];
+          if (oldAudioTrack) {
+            console.log("🛑 Stopping old audio track:", oldAudioTrack.id);
+            localStream.removeTrack(oldAudioTrack);
+            oldAudioTrack.stop();
+          }
+          localStream.addTrack(audioTrack);
+        } else {
+          const newStream = new MediaStream([audioTrack]);
+          setLocalStream(newStream);
+        }
+
+        if (mediaProcessorRef.current) {
+          mediaProcessorRef.current.cleanup();
+          mediaProcessorRef.current = new MediaProcessor();
+          const newProcessed = mediaProcessorRef.current.initializeAudioProcessing(localStream || new MediaStream([audioTrack]));
+          setProcessedStream(newProcessed);
+        }
+      } catch (error) {
+        console.error("❌ Error enabling audio:", error);
+        setIsAudioEnabled(false);
+        toast({
+          title: "Microphone Error",
+          description: "Could not access microphone.",
+          variant: "destructive",
+        });
+        return;
+      }
+    } else {
+      console.log("🔇 Turning OFF microphone...");
+      if (localStream) {
+        const audioTrack = localStream.getAudioTracks()[0];
+        if (audioTrack) {
+          console.log("🛑 Microphone turned OFF - stopping audio track:", audioTrack.id);
+          audioTrack.stop();
+          localStream.removeTrack(audioTrack);
+        }
+      }
+
+      if (processedStream) {
+        const processedAudioTrack = processedStream.getAudioTracks()[0];
+        if (processedAudioTrack) {
+          processedStream.removeTrack(processedAudioTrack);
+        }
+        setProcessedStream(new MediaStream(processedStream.getTracks()));
       }
     }
+
+    wsRef.current?.send(JSON.stringify({
+      type: "toggle-audio",
+      roomId,
+      participantId,
+      isEnabled: newAudioState,
+    }));
+    
+    setParticipants(prev => prev.map(p => 
+      p.id === participantId ? { ...p, isAudioEnabled: newAudioState } : p
+    ));
   };
 
-  const toggleVideo = () => {
-    if (localStream) {
-      const videoTrack = localStream.getVideoTracks()[0];
-      if (videoTrack) {
-        videoTrack.enabled = !isVideoEnabled;
-        setIsVideoEnabled(!isVideoEnabled);
+  const toggleVideo = async () => {
+    const newVideoState = !isVideoEnabled;
+    setIsVideoEnabled(newVideoState);
+
+    if (newVideoState) {
+      try {
+        console.log("📹 Requesting camera access...");
+        const videoStream = await navigator.mediaDevices.getUserMedia({
+          video: { width: 1920, height: 1080 },
+        });
+
+        const videoTrack = videoStream.getVideoTracks()[0];
+        console.log("✅ Camera turned ON - new video track created:", videoTrack.id);
         
-        wsRef.current?.send(JSON.stringify({
-          type: "toggle-video",
-          roomId,
-          participantId,
-          isEnabled: !isVideoEnabled,
-        }));
-        
-        setParticipants(prev => prev.map(p => 
-          p.id === participantId ? { ...p, isVideoEnabled: !isVideoEnabled } : p
-        ));
+        if (localStream) {
+          const oldVideoTrack = localStream.getVideoTracks()[0];
+          if (oldVideoTrack) {
+            console.log("🛑 Stopping old video track:", oldVideoTrack.id);
+            localStream.removeTrack(oldVideoTrack);
+            oldVideoTrack.stop();
+          }
+          localStream.addTrack(videoTrack);
+        } else {
+          const newStream = new MediaStream([videoTrack]);
+          setLocalStream(newStream);
+        }
+
+        if (processedStream) {
+          const oldProcessedVideo = processedStream.getVideoTracks()[0];
+          if (oldProcessedVideo) {
+            processedStream.removeTrack(oldProcessedVideo);
+          }
+          processedStream.addTrack(videoTrack);
+          setProcessedStream(new MediaStream(processedStream.getTracks()));
+        }
+      } catch (error) {
+        console.error("❌ Error enabling video:", error);
+        setIsVideoEnabled(false);
+        toast({
+          title: "Camera Error",
+          description: "Could not access camera.",
+          variant: "destructive",
+        });
+        return;
+      }
+    } else {
+      console.log("📷 Turning OFF camera...");
+      if (localStream) {
+        const videoTrack = localStream.getVideoTracks()[0];
+        if (videoTrack) {
+          console.log("🛑 Camera turned OFF - stopping video track:", videoTrack.id);
+          videoTrack.stop();
+          localStream.removeTrack(videoTrack);
+        }
+      }
+
+      if (processedStream) {
+        const processedVideoTrack = processedStream.getVideoTracks()[0];
+        if (processedVideoTrack) {
+          processedStream.removeTrack(processedVideoTrack);
+        }
+        setProcessedStream(new MediaStream(processedStream.getTracks()));
       }
     }
+
+    wsRef.current?.send(JSON.stringify({
+      type: "toggle-video",
+      roomId,
+      participantId,
+      isEnabled: newVideoState,
+    }));
+    
+    setParticipants(prev => prev.map(p => 
+      p.id === participantId ? { ...p, isVideoEnabled: newVideoState } : p
+    ));
   };
 
   const toggleScreenShare = async () => {
