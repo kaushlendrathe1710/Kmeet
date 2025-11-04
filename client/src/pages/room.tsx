@@ -446,6 +446,30 @@ export default function Room() {
           });
         }
         break;
+
+      case "audio-force-disabled":
+        if (message.targetParticipantId === participantId) {
+          setIsAudioEnabled(false);
+          localStream?.getAudioTracks().forEach(track => track.enabled = false);
+          toast({
+            title: "Audio Disabled by Host",
+            description: "The host has disabled your audio",
+            variant: "destructive",
+          });
+        }
+        break;
+
+      case "video-force-disabled":
+        if (message.targetParticipantId === participantId) {
+          setIsVideoEnabled(false);
+          localStream?.getVideoTracks().forEach(track => track.enabled = false);
+          toast({
+            title: "Video Disabled by Host",
+            description: "The host has disabled your video",
+            variant: "destructive",
+          });
+        }
+        break;
     }
   };
 

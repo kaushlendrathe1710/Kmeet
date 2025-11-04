@@ -590,6 +590,82 @@ export async function registerRoutes(app: Express): Promise<Server> {
             console.log(`Host ${participantId} ${targetParticipantId ? `spotlighted ${targetName}` : 'cleared spotlight'} in room ${roomId}`);
             break;
           }
+
+          case 'force-disable-audio': {
+            const { roomId, participantId, targetParticipantId } = message;
+            
+            // Verify requester is host
+            const requester = await storage.getParticipant(participantId);
+            if (!requester || !requester.isHost) {
+              console.log(`Unauthorized force-disable-audio attempt by ${participantId}`);
+              ws.send(JSON.stringify({
+                type: 'error',
+                message: 'Only the host can force disable audio',
+              }));
+              break;
+            }
+            
+            // Verify target exists and is in same room
+            const target = await storage.getParticipant(targetParticipantId);
+            if (!target || target.roomId !== roomId) {
+              console.log(`Invalid force-disable-audio target: ${targetParticipantId}`);
+              ws.send(JSON.stringify({
+                type: 'error',
+                message: 'Cannot disable audio for this participant',
+              }));
+              break;
+            }
+            
+            // Send force-disable command to target participant
+            const targetClient = clients.get(targetParticipantId);
+            if (targetClient && targetClient.readyState === WebSocket.OPEN) {
+              targetClient.send(JSON.stringify({
+                type: 'audio-force-disabled',
+                targetParticipantId,
+              }));
+              
+              console.log(`Host ${participantId} force-disabled audio for ${target.name}`);
+            }
+            break;
+          }
+
+          case 'force-disable-video': {
+            const { roomId, participantId, targetParticipantId } = message;
+            
+            // Verify requester is host
+            const requester = await storage.getParticipant(participantId);
+            if (!requester || !requester.isHost) {
+              console.log(`Unauthorized force-disable-video attempt by ${participantId}`);
+              ws.send(JSON.stringify({
+                type: 'error',
+                message: 'Only the host can force disable video',
+              }));
+              break;
+            }
+            
+            // Verify target exists and is in same room
+            const target = await storage.getParticipant(targetParticipantId);
+            if (!target || target.roomId !== roomId) {
+              console.log(`Invalid force-disable-video target: ${targetParticipantId}`);
+              ws.send(JSON.stringify({
+                type: 'error',
+                message: 'Cannot disable video for this participant',
+              }));
+              break;
+            }
+            
+            // Send force-disable command to target participant
+            const targetClient = clients.get(targetParticipantId);
+            if (targetClient && targetClient.readyState === WebSocket.OPEN) {
+              targetClient.send(JSON.stringify({
+                type: 'video-force-disabled',
+                targetParticipantId,
+              }));
+              
+              console.log(`Host ${participantId} force-disabled video for ${target.name}`);
+            }
+            break;
+          }
         }
       } catch (error) {
         console.error('Error handling WebSocket message:', error);

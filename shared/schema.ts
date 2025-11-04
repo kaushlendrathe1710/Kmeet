@@ -184,6 +184,26 @@ export const wsMessageSchema = z.discriminatedUnion("type", [
     spotlightedParticipantId: z.string().nullable(),
     spotlightedParticipantName: z.string().nullable(),
   }),
+  z.object({
+    type: z.literal("force-disable-audio"),
+    roomId: z.string(),
+    participantId: z.string(),
+    targetParticipantId: z.string(),
+  }),
+  z.object({
+    type: z.literal("force-disable-video"),
+    roomId: z.string(),
+    participantId: z.string(),
+    targetParticipantId: z.string(),
+  }),
+  z.object({
+    type: z.literal("audio-force-disabled"),
+    targetParticipantId: z.string(),
+  }),
+  z.object({
+    type: z.literal("video-force-disabled"),
+    targetParticipantId: z.string(),
+  }),
 ]);
 
 export type WSMessage = z.infer<typeof wsMessageSchema>;
