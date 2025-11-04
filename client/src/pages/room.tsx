@@ -41,6 +41,7 @@ export default function Room() {
   const [isVideoEnabled, setIsVideoEnabled] = useState(true);
   const [isScreenSharing, setIsScreenSharing] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
+  const [canRecord, setCanRecord] = useState(false);
   const [showChat, setShowChat] = useState(false);
   const [showParticipants, setShowParticipants] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
@@ -101,6 +102,10 @@ export default function Room() {
     };
   }, [roomId]);
 
+  // Push-to-talk state
+  const pushToTalkActiveRef = useRef(false);
+  const wasAudioEnabledRef = useRef(false);
+
   useEffect(() => {
     const handleKeyPress = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
@@ -108,6 +113,17 @@ export default function Room() {
       }
 
       const key = e.key.toLowerCase();
+      
+      // Push-to-talk on spacebar press
+      if (key === ' ' && !pushToTalkActiveRef.current) {
+        e.preventDefault();
+        pushToTalkActiveRef.current = true;
+        wasAudioEnabledRef.current = isAudioEnabled;
+        if (!isAudioEnabled) {
+          toggleAudio();
+        }
+        return;
+      }
       
       if (key === 'escape' && recordingCountdown !== null) {
         recordingControlsRef.current?.cancelCountdown();
@@ -154,8 +170,29 @@ export default function Room() {
       }
     };
 
+    const handleKeyUp = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
+        return;
+      }
+
+      const key = e.key.toLowerCase();
+      
+      // Push-to-talk release
+      if (key === ' ' && pushToTalkActiveRef.current) {
+        e.preventDefault();
+        pushToTalkActiveRef.current = false;
+        if (!wasAudioEnabledRef.current && isAudioEnabled) {
+          toggleAudio();
+        }
+      }
+    };
+
     window.addEventListener('keydown', handleKeyPress);
-    return () => window.removeEventListener('keydown', handleKeyPress);
+    window.addEventListener('keyup', handleKeyUp);
+    return () => {
+      window.removeEventListener('keydown', handleKeyPress);
+      window.removeEventListener('keyup', handleKeyUp);
+    };
   }, [isRecording, isAudioEnabled, isVideoEnabled, isScreenSharing, recordingCountdown]);
 
   useEffect(() => {
@@ -339,6 +376,9 @@ export default function Room() {
         setIsHost(true);
         setIsWaitingApproval(false);
         setParticipants(message.participants);
+        // Set canRecord from participant data (host gets it automatically)
+        const self = message.participants.find((p: any) => p.id === participantId);
+        if (self) setCanRecord(self.canRecord || false);
         break;
       
       case "chat-message":
@@ -467,6 +507,18 @@ export default function Room() {
             title: "Video Disabled by Host",
             description: "The host has disabled your video",
             variant: "destructive",
+          });
+        }
+        break;
+
+      case "recording-permission-updated":
+        if (message.targetParticipantId === participantId) {
+          setCanRecord(message.canRecord);
+          toast({
+            title: message.canRecord ? "Recording Enabled" : "Recording Disabled",
+            description: message.canRecord 
+              ? "You can now start recording" 
+              : "Your recording permission has been revoked",
           });
         }
         break;
@@ -988,7 +1040,18 @@ export default function Room() {
               <RecordingControls
                 ref={recordingControlsRef}
                 isRecording={isRecording}
-                onToggleRecording={() => setIsRecording(!isRecording)}
+                canRecord={canRecord}
+                onToggleRecording={() => {
+                  if (!isRecording && !canRecord) {
+                    toast({
+                      title: "Recording Permission Required",
+                      description: "You don't have permission to record. Ask the host to grant permission.",
+                      variant: "destructive",
+                    });
+                    return;
+                  }
+                  setIsRecording(!isRecording);
+                }}
                 localStream={processedStream || localStream}
                 onCountdownChange={setRecordingCountdown}
                 remoteStreams={remoteStreams}

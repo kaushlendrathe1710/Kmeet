@@ -67,6 +67,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               isHost,
               approvalStatus: isHost ? "approved" : "pending",
               handRaised: false,
+              canRecord: isHost,
               joinedAt: Date.now(),
             };
 
@@ -532,8 +533,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
             // Update old host's isHost to false
             await storage.updateParticipant(participantId, { isHost: false });
             
-            // Update new host's isHost to true
-            await storage.updateParticipant(newHostId, { isHost: true });
+            // Update new host's isHost to true and grant recording permission
+            await storage.updateParticipant(newHostId, { isHost: true, canRecord: true });
             
             // Broadcast host-transferred to all participants
             broadcastToRoom(roomId, '', {
@@ -664,6 +665,49 @@ export async function registerRoutes(app: Express): Promise<Server> {
               
               console.log(`Host ${participantId} force-disabled video for ${target.name}`);
             }
+            break;
+          }
+
+          case 'grant-recording-permission': {
+            const { roomId, participantId, targetParticipantId } = message;
+            
+            // Verify requester is host
+            const requester = await storage.getParticipant(participantId);
+            if (!requester || !requester.isHost) {
+              console.log(`Unauthorized grant-recording-permission attempt by ${participantId}`);
+              ws.send(JSON.stringify({
+                type: 'error',
+                message: 'Only the host can grant recording permissions',
+              }));
+              break;
+            }
+            
+            // Verify target exists and is in same room
+            const target = await storage.getParticipant(targetParticipantId);
+            if (!target || target.roomId !== roomId) {
+              console.log(`Invalid grant-recording-permission target: ${targetParticipantId}`);
+              ws.send(JSON.stringify({
+                type: 'error',
+                message: 'Cannot grant permission to this participant',
+              }));
+              break;
+            }
+            
+            // Toggle recording permission
+            const newCanRecord = !target.canRecord;
+            await storage.updateParticipant(targetParticipantId, { canRecord: newCanRecord });
+            
+            // Notify target participant
+            const targetClient = clients.get(targetParticipantId);
+            if (targetClient && targetClient.readyState === WebSocket.OPEN) {
+              targetClient.send(JSON.stringify({
+                type: 'recording-permission-updated',
+                targetParticipantId,
+                canRecord: newCanRecord,
+              }));
+            }
+            
+            console.log(`Host ${participantId} ${newCanRecord ? 'granted' : 'revoked'} recording permission for ${target.name}`);
             break;
           }
         }

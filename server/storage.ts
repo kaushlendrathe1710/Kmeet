@@ -60,6 +60,7 @@ export class MemStorage implements IStorage {
       participants: [],
       isLocked: false,
       spotlightedParticipantId: null,
+      password: null,
     };
     this.rooms.set(roomId, room);
     this.messages.set(roomId, []);

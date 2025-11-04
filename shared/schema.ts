@@ -26,6 +26,7 @@ export const roomSchema = z.object({
   participants: z.array(z.string()).default([]),
   isLocked: z.boolean().default(false),
   spotlightedParticipantId: z.string().nullable().default(null),
+  password: z.string().nullable().default(null),
 });
 
 export type Room = z.infer<typeof roomSchema>;
@@ -41,6 +42,7 @@ export const participantSchema = z.object({
   isHost: z.boolean().default(false),
   approvalStatus: z.enum(["pending", "approved", "denied"]).default("pending"),
   handRaised: z.boolean().default(false),
+  canRecord: z.boolean().default(false),
   joinedAt: z.number(),
 });
 
@@ -203,6 +205,23 @@ export const wsMessageSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("video-force-disabled"),
     targetParticipantId: z.string(),
+  }),
+  z.object({
+    type: z.literal("grant-recording-permission"),
+    roomId: z.string(),
+    participantId: z.string(),
+    targetParticipantId: z.string(),
+  }),
+  z.object({
+    type: z.literal("recording-permission-updated"),
+    targetParticipantId: z.string(),
+    canRecord: z.boolean(),
+  }),
+  z.object({
+    type: z.literal("recording-status"),
+    roomId: z.string(),
+    participantId: z.string(),
+    isRecording: z.boolean(),
   }),
 ]);
 
