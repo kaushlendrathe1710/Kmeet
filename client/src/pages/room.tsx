@@ -12,8 +12,15 @@ import { WaitingRoom } from "@/components/waiting-room";
 import { JoinRequestsPanel } from "@/components/join-requests-panel";
 import { EmojiReactionsContainer } from "@/components/emoji-reaction";
 import { AudioWaveform } from "@/components/audio-waveform";
+import { NetworkQualityIndicator } from "@/components/network-quality-indicator";
+import { QualitySelector } from "@/components/quality-selector";
+import { PresetSelector } from "@/components/preset-selector";
 import { useToast } from "@/hooks/use-toast";
 import { MediaProcessor } from "@/lib/media-processor";
+import { useNetworkQuality } from "@/hooks/use-network-quality";
+import { useBandwidthAdaptation, VIDEO_QUALITY_CONSTRAINTS, type VideoQualityLevel } from "@/hooks/use-bandwidth-adaptation";
+import { QUALITY_PRESETS, type QualityPreset } from "@/lib/quality-presets";
+import { useAutoSave, recoverRoomState, clearSavedRoomState } from "@/hooks/use-auto-save";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -65,6 +72,8 @@ export default function Room() {
   const [chapterMarkers, setChapterMarkers] = useState<Array<{ timestamp: number; label: string }>>([]);
   const [showNotes, setShowNotes] = useState<Array<{ timestamp: number; note: string }>>([]);
   const [isReconnecting, setIsReconnecting] = useState(false);
+  const [videoQuality, setVideoQuality] = useState<VideoQualityLevel>("auto");
+  const [currentPreset, setCurrentPreset] = useState<QualityPreset>("interview");
   const reconnectAttemptsRef = useRef(0);
   const reconnectTimeoutRef = useRef<number | null>(null);
   const recordingControlsRef = useRef<{ toggleRecording: () => void; cancelCountdown: () => void; pauseRecording: () => void; resumeRecording: () => void } | null>(null);
@@ -79,6 +88,7 @@ export default function Room() {
   
   const wsRef = useRef<WebSocket | null>(null);
   const peersRef = useRef<Map<string, any>>(new Map());
+  const [primaryPeerConnection, setPrimaryPeerConnection] = useState<RTCPeerConnection | null>(null);
   const [duration, setDuration] = useState(0);
   const startTimeRef = useRef<number>(Date.now());
   const mediaProcessorRef = useRef<MediaProcessor | null>(null);
@@ -88,6 +98,23 @@ export default function Room() {
     contrast: 100,
     saturation: 100,
   });
+
+  const networkStats = useNetworkQuality(primaryPeerConnection);
+  const bandwidthStats = useBandwidthAdaptation(primaryPeerConnection, videoQuality === "auto");
+
+  useAutoSave({
+    roomId,
+    participantName,
+    participantId,
+    isAudioEnabled,
+    isVideoEnabled,
+    videoQuality,
+    currentPreset,
+    viewMode,
+    hideSelfView,
+    gridColumns,
+    videoSettings,
+  }, !isWaitingApproval);
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -103,11 +130,29 @@ export default function Room() {
       return;
     }
 
+    const recoveredState = recoverRoomState(roomId);
+    if (recoveredState) {
+      if (recoveredState.isAudioEnabled !== undefined) setIsAudioEnabled(recoveredState.isAudioEnabled);
+      if (recoveredState.isVideoEnabled !== undefined) setIsVideoEnabled(recoveredState.isVideoEnabled);
+      if (recoveredState.videoQuality) setVideoQuality(recoveredState.videoQuality as VideoQualityLevel);
+      if (recoveredState.currentPreset) setCurrentPreset(recoveredState.currentPreset as QualityPreset);
+      if (recoveredState.viewMode) setViewMode(recoveredState.viewMode as "grid" | "speaker");
+      if (recoveredState.hideSelfView !== undefined) setHideSelfView(recoveredState.hideSelfView);
+      if (recoveredState.gridColumns) setGridColumns(recoveredState.gridColumns as 2 | 3 | 4);
+      if (recoveredState.videoSettings) setVideoSettings(recoveredState.videoSettings);
+      
+      toast({
+        title: "Session Recovered",
+        description: "Your previous settings have been restored",
+      });
+    }
+
     initializeMedia();
     connectWebSocket();
 
     return () => {
       cleanup();
+      clearSavedRoomState();
     };
   }, [roomId]);
 
@@ -298,12 +343,27 @@ export default function Room() {
     
     ws.onopen = () => {
       console.log("WebSocket connected successfully");
+      setIsReconnecting(false);
+      reconnectAttemptsRef.current = 0;
+      
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current);
+        reconnectTimeoutRef.current = null;
+      }
+      
       ws.send(JSON.stringify({
         type: "join-room",
         roomId,
         participantId,
         participantName,
       }));
+      
+      if (reconnectAttemptsRef.current > 0) {
+        toast({
+          title: "Reconnected",
+          description: "Connection restored successfully.",
+        });
+      }
     };
 
     ws.onmessage = (event) => {
@@ -312,18 +372,44 @@ export default function Room() {
 
     ws.onerror = (error) => {
       console.error("WebSocket error:", error);
-      toast({
-        title: "Connection Error",
-        description: "Failed to connect to the server. Please try again.",
-        variant: "destructive",
-      });
     };
 
-    ws.onclose = () => {
-      console.log("WebSocket disconnected");
+    ws.onclose = (event) => {
+      console.log("WebSocket disconnected", event.code, event.reason);
+      
+      if (event.code !== 1000 && event.code !== 1001) {
+        attemptReconnect();
+      }
     };
 
     wsRef.current = ws;
+  };
+
+  const attemptReconnect = () => {
+    const maxAttempts = 10;
+    const baseDelay = 1000;
+    const maxDelay = 30000;
+    
+    if (reconnectAttemptsRef.current >= maxAttempts) {
+      toast({
+        title: "Connection Lost",
+        description: "Could not reconnect to the server. Please refresh the page.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    reconnectAttemptsRef.current += 1;
+    const delay = Math.min(baseDelay * Math.pow(2, reconnectAttemptsRef.current - 1), maxDelay);
+    
+    setIsReconnecting(true);
+    
+    console.log(`Reconnect attempt ${reconnectAttemptsRef.current}/${maxAttempts} in ${delay}ms`);
+    
+    reconnectTimeoutRef.current = window.setTimeout(() => {
+      console.log("Attempting to reconnect...");
+      connectWebSocket();
+    }, delay);
   };
 
   const handleWebSocketMessage = (message: any) => {
@@ -858,8 +944,88 @@ export default function Room() {
       participantId,
     }));
     
+    clearSavedRoomState();
     cleanup();
     setLocation("/");
+  };
+
+  const handlePresetChange = async (preset: QualityPreset) => {
+    setCurrentPreset(preset);
+    
+    if (preset === "custom") {
+      toast({
+        title: "Custom Preset",
+        description: "Use manual controls to adjust settings",
+      });
+      return;
+    }
+    
+    const presetConfig = QUALITY_PRESETS[preset];
+    if (!presetConfig) return;
+    
+    setVideoQuality(presetConfig.videoQuality);
+    
+    if (presetConfig.audioSettings && mediaProcessorRef.current) {
+      const audioSettings = presetConfig.audioSettings;
+      if (audioSettings.gainControl !== undefined) {
+        mediaProcessorRef.current.setGain(audioSettings.gainControl);
+      }
+      if (audioSettings.noiseSuppression !== undefined) {
+        mediaProcessorRef.current.setNoiseSuppressionIntensity(audioSettings.noiseSuppression * 100);
+      }
+    }
+    
+    if (presetConfig.videoSettings) {
+      setVideoSettings({
+        brightness: presetConfig.videoSettings.brightness ?? 100,
+        contrast: presetConfig.videoSettings.contrast ?? 100,
+        saturation: presetConfig.videoSettings.saturation ?? 100,
+      });
+    }
+    
+    if (localStream && presetConfig.videoConstraints) {
+      try {
+        const videoTrack = localStream.getVideoTracks()[0];
+        if (videoTrack) {
+          await videoTrack.applyConstraints(presetConfig.videoConstraints);
+        }
+      } catch (err) {
+        console.error("Error applying preset video constraints:", err);
+      }
+    }
+    
+    toast({
+      title: "Preset Applied",
+      description: `${presetConfig.name} - ${presetConfig.description}`,
+    });
+  };
+
+  const handleQualityChange = async (quality: VideoQualityLevel) => {
+    setVideoQuality(quality);
+    setCurrentPreset("custom");
+    
+    if (!localStream) return;
+    
+    const effectiveQuality = quality === "auto" ? bandwidthStats.recommendedQuality : quality;
+    const constraints = effectiveQuality !== "auto" ? VIDEO_QUALITY_CONSTRAINTS[effectiveQuality] : VIDEO_QUALITY_CONSTRAINTS.medium;
+    
+    try {
+      const videoTrack = localStream.getVideoTracks()[0];
+      if (videoTrack) {
+        await videoTrack.applyConstraints(constraints);
+        toast({
+          title: "Video Quality Updated",
+          description: `Quality set to ${quality}${quality === "auto" ? ` (${effectiveQuality})` : ""}`,
+        });
+      }
+    } catch (err) {
+      console.error("Error applying video constraints:", err);
+      toast({
+        title: "Quality Change Failed",
+        description: "Could not update video quality",
+        variant: "destructive",
+      });
+    }
   };
 
   const toggleFullscreen = async () => {
@@ -963,6 +1129,11 @@ export default function Room() {
   };
 
   const cleanup = () => {
+    if (reconnectTimeoutRef.current) {
+      clearTimeout(reconnectTimeoutRef.current);
+      reconnectTimeoutRef.current = null;
+    }
+    
     localStream?.getTracks().forEach(track => track.stop());
     screenStream?.getTracks().forEach(track => track.stop());
     processedStream?.getTracks().forEach(track => track.stop());
@@ -1023,6 +1194,20 @@ export default function Room() {
               <Radio className="h-3 w-3 text-destructive animate-pulse" />
               <span className="text-xs font-medium text-destructive" data-testid="text-recording-indicator">REC</span>
             </div>
+          )}
+          {isReconnecting && (
+            <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-yellow-500/10 border border-yellow-500">
+              <div className="h-2 w-2 rounded-full bg-yellow-500 animate-pulse" />
+              <span className="text-xs font-medium text-yellow-600 dark:text-yellow-500" data-testid="text-reconnecting-indicator">Reconnecting...</span>
+            </div>
+          )}
+          {!isReconnecting && participants.length > 1 && (
+            <NetworkQualityIndicator
+              quality={networkStats.quality}
+              packetLoss={networkStats.packetLoss}
+              latency={networkStats.latency}
+              showDetails={false}
+            />
           )}
           <Button
             variant="outline"
@@ -1236,6 +1421,20 @@ export default function Room() {
               >
                 <Settings className="w-5 h-5" />
               </Button>
+
+              <div className="rounded-full overflow-hidden">
+                <QualitySelector
+                  currentQuality={videoQuality}
+                  recommendedQuality={bandwidthStats.recommendedQuality}
+                  onQualityChange={handleQualityChange}
+                  availableBandwidth={bandwidthStats.availableBandwidth}
+                />
+              </div>
+
+              <PresetSelector
+                currentPreset={currentPreset}
+                onPresetChange={handlePresetChange}
+              />
 
               {isHost && (
                 <div className="relative">
