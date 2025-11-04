@@ -10,7 +10,7 @@ Preferred communication style: Simple, everyday language.
 
 ## Recent Changes (November 4, 2025)
 
-**Seven New Features Implemented and Verified:**
+**Ten Professional Features Implemented and Verified:**
 
 1. **Remove Active Participant** - Host can remove participants already in the room with server-side authorization
 2. **Comprehensive Keyboard Shortcuts** - Full keyboard control (M/V/S/R/C/P/H/F/ESC keys)
@@ -19,6 +19,9 @@ Preferred communication style: Simple, everyday language.
 5. **Recording Countdown** - 3-2-1 countdown with full-screen overlay, ESC to cancel
 6. **Hide Self-View** - Option to hide local participant from video grid
 7. **Mute All Participants** - Host can mute everyone using recoverable track.enabled method
+8. **Individual Track Recording** - Each participant's audio recorded as separate downloadable files with dynamic tracking
+9. **Audio Level Meters** - Real-time visual bars showing speaking volume using Web Audio API with shared AudioContext
+10. **Active Speaker Detection** - Automatic visual highlighting (primary border + shadow) of loudest participant with debouncing
 
 **Critical Fixes Applied:**
 - Mute-all now uses `track.enabled = false` instead of stopping tracks (participants can unmute themselves)
@@ -26,15 +29,26 @@ Preferred communication style: Simple, everyday language.
 - Countdown cancellation uses guard flag to abort async recording start
 - Emoji reactions use performant CSS animations instead of 60fps React re-renders
 - Keyboard event handler includes `recordingCountdown` in dependencies to fix stale closure
+- Audio level hook uses shared AudioContext to avoid browser's 6-context limit
+- Active speaker callback memoized with useCallback to prevent infinite render loop
+- State updates only occur when audio levels actually change (performance optimization)
 
 **New Components:**
 - `emoji-reaction.tsx` - CSS-based floating emoji animation component
+- `audio-level-meter.tsx` - Visual bar displaying real-time audio levels
 - Updated `RecordingControls` to forwardRef with `toggleRecording` and `cancelCountdown` methods
+
+**New Hooks:**
+- `use-audio-level.ts` - Web Audio API integration with shared AudioContext for real-time volume analysis
+- `use-active-speaker.ts` - Detects loudest participant with threshold and debouncing logic
 
 **Architecture Patterns:**
 - Centralized state management with ref-based coordination between keyboard shortcuts and UI controls
 - Host authorization validation on all privileged operations (remove, mute-all)
 - WebSocket message handlers for real-time state synchronization (hand raise, emoji reactions, mute-all)
+- Shared AudioContext singleton pattern to avoid browser limitations (max 6 contexts)
+- Callback-based audio level reporting from children to parent with memoization
+- Multi-track recording with dynamic participant tracking (handles late joiners and departures)
 
 ## Documentation
 
