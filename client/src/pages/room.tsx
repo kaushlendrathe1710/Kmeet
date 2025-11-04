@@ -224,26 +224,25 @@ export default function Room() {
 
   const toggleAudio = async () => {
     if (isAudioEnabled) {
-      console.log("🔇 Turning OFF microphone - STOPPING DEVICE NOW...");
+      console.log("🔇 Turning OFF microphone - STOPPING ALL AUDIO TRACKS NOW...");
       
-      if (localStream) {
-        const audioTrack = localStream.getAudioTracks()[0];
-        if (audioTrack) {
-          console.log("🛑 IMMEDIATELY STOPPING audio track:", audioTrack.id);
-          audioTrack.stop();
-          localStream.removeTrack(audioTrack);
-        }
+      localStream?.getAudioTracks().forEach(track => {
+        console.log("🛑 Stopping localStream audio track:", track.id);
+        track.stop();
+      });
+      
+      processedStream?.getAudioTracks().forEach(track => {
+        console.log("🛑 Stopping processedStream audio track:", track.id);
+        track.stop();
+      });
+
+      if (mediaProcessorRef.current) {
+        mediaProcessorRef.current.cleanup();
+        mediaProcessorRef.current = null;
       }
 
-      if (processedStream) {
-        const processedAudioTrack = processedStream.getAudioTracks()[0];
-        if (processedAudioTrack) {
-          processedAudioTrack.stop();
-          processedStream.removeTrack(processedAudioTrack);
-        }
-      }
-
-      const newStream = new MediaStream(localStream?.getVideoTracks() || []);
+      const videoTracks = localStream?.getVideoTracks() || [];
+      const newStream = new MediaStream(videoTracks);
       setLocalStream(newStream);
       setProcessedStream(newStream);
       setIsAudioEnabled(false);
@@ -259,7 +258,7 @@ export default function Room() {
         p.id === participantId ? { ...p, isAudioEnabled: false } : p
       ));
       
-      console.log("✅ Microphone STOPPED - device should be OFF");
+      console.log("✅ ALL microphone tracks STOPPED - device is OFF");
     } else {
       console.log("🎤 Turning ON microphone - STARTING DEVICE NOW...");
       
@@ -273,15 +272,12 @@ export default function Room() {
         });
 
         const audioTrack = audioStream.getAudioTracks()[0];
-        console.log("✅ IMMEDIATELY STARTED new audio track:", audioTrack.id);
+        console.log("✅ New microphone track started:", audioTrack.id);
         
         const videoTracks = localStream?.getVideoTracks() || [];
         const newStream = new MediaStream([...videoTracks, audioTrack]);
         setLocalStream(newStream);
 
-        if (mediaProcessorRef.current) {
-          mediaProcessorRef.current.cleanup();
-        }
         mediaProcessorRef.current = new MediaProcessor();
         const newProcessed = mediaProcessorRef.current.initializeAudioProcessing(newStream);
         setProcessedStream(newProcessed);
@@ -299,7 +295,7 @@ export default function Room() {
           p.id === participantId ? { ...p, isAudioEnabled: true } : p
         ));
         
-        console.log("✅ Microphone STARTED - device should be ON");
+        console.log("✅ Microphone is ON and working");
       } catch (error) {
         console.error("❌ Error enabling audio:", error);
         toast({
@@ -313,27 +309,21 @@ export default function Room() {
 
   const toggleVideo = async () => {
     if (isVideoEnabled) {
-      console.log("📷 Turning OFF camera - STOPPING DEVICE NOW...");
+      console.log("📷 Turning OFF camera - STOPPING ALL VIDEO TRACKS NOW...");
       
-      if (localStream) {
-        const videoTrack = localStream.getVideoTracks()[0];
-        if (videoTrack) {
-          console.log("🛑 IMMEDIATELY STOPPING video track:", videoTrack.id);
-          videoTrack.stop();
-          localStream.removeTrack(videoTrack);
-        }
-      }
+      localStream?.getVideoTracks().forEach(track => {
+        console.log("🛑 Stopping localStream video track:", track.id);
+        track.stop();
+      });
+      
+      processedStream?.getVideoTracks().forEach(track => {
+        console.log("🛑 Stopping processedStream video track:", track.id);
+        track.stop();
+      });
 
-      if (processedStream) {
-        const processedVideoTrack = processedStream.getVideoTracks()[0];
-        if (processedVideoTrack) {
-          processedVideoTrack.stop();
-          processedStream.removeTrack(processedVideoTrack);
-        }
-      }
-
-      const newStream = new MediaStream(localStream?.getAudioTracks() || []);
-      setLocalStream(newStream);
+      const audioTracks = processedStream?.getAudioTracks() || localStream?.getAudioTracks() || [];
+      const newStream = new MediaStream(audioTracks);
+      setLocalStream(new MediaStream(localStream?.getAudioTracks() || []));
       setProcessedStream(newStream);
       setIsVideoEnabled(false);
       
@@ -348,7 +338,7 @@ export default function Room() {
         p.id === participantId ? { ...p, isVideoEnabled: false } : p
       ));
       
-      console.log("✅ Camera STOPPED - device should be OFF");
+      console.log("✅ ALL camera tracks STOPPED - device is OFF");
     } else {
       console.log("📹 Turning ON camera - STARTING DEVICE NOW...");
       
@@ -358,19 +348,15 @@ export default function Room() {
         });
 
         const videoTrack = videoStream.getVideoTracks()[0];
-        console.log("✅ IMMEDIATELY STARTED new video track:", videoTrack.id);
+        console.log("✅ New camera track started:", videoTrack.id);
         
-        const audioTracks = localStream?.getAudioTracks() || [];
-        const newStream = new MediaStream([...audioTracks, videoTrack]);
-        setLocalStream(newStream);
+        const currentAudioTracks = localStream?.getAudioTracks() || [];
+        const newLocalStream = new MediaStream([...currentAudioTracks, videoTrack]);
+        setLocalStream(newLocalStream);
 
-        if (processedStream) {
-          const processedAudioTracks = processedStream.getAudioTracks();
-          const newProcessed = new MediaStream([...processedAudioTracks, videoTrack]);
-          setProcessedStream(newProcessed);
-        } else {
-          setProcessedStream(newStream);
-        }
+        const processedAudioTracks = processedStream?.getAudioTracks() || [];
+        const newProcessedStream = new MediaStream([...processedAudioTracks, videoTrack]);
+        setProcessedStream(newProcessedStream);
 
         setIsVideoEnabled(true);
         
@@ -385,7 +371,7 @@ export default function Room() {
           p.id === participantId ? { ...p, isVideoEnabled: true } : p
         ));
         
-        console.log("✅ Camera STARTED - device should be ON");
+        console.log("✅ Camera is ON and working");
       } catch (error) {
         console.error("❌ Error enabling video:", error);
         toast({
