@@ -412,7 +412,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             await storage.updateParticipant(participantId, { isScreenSharing: isSharing });
 
             broadcastToRoom(roomId, participantId, {
-              type: 'screen-share-toggled',
+              type: 'screen-share',
               participantId,
               isSharing,
             });

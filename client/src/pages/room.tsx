@@ -96,6 +96,7 @@ export default function Room() {
   }>>([]);
   const reconnectAttemptsRef = useRef(0);
   const reconnectTimeoutRef = useRef<number | null>(null);
+  const isScreenSharingRef = useRef(false);
   const recordingControlsRef = useRef<{ toggleRecording: () => void; cancelCountdown: () => void; pauseRecording: () => void; resumeRecording: () => void } | null>(null);
   const roomContainerRef = useRef<HTMLDivElement | null>(null);
   const videoElementRef = useRef<HTMLVideoElement | null>(null);
@@ -192,6 +193,8 @@ export default function Room() {
         return;
       }
 
+      if (!backgroundProcessorRef.current) return;
+      
       backgroundProcessorRef.current.updateSettings(backgroundSettings);
       const bgStream = await backgroundProcessorRef.current.startProcessing(processedStream);
       if (bgStream) {
@@ -564,6 +567,21 @@ export default function Room() {
         ));
         break;
       
+      case "screen-share":
+        setParticipants(prev => prev.map(p => 
+          p.id === message.participantId ? { ...p, isScreenSharing: message.isSharing } : p
+        ));
+        if (message.isSharing) {
+          const participant = participants.find(p => p.id === message.participantId);
+          if (participant && participant.id !== participantId) {
+            toast({
+              title: "Screen Sharing Started",
+              description: `${participant.name} is now sharing their screen`,
+            });
+          }
+        }
+        break;
+      
       case "hand-raised":
         setParticipants(prev => prev.map(p => 
           p.id === message.participantId ? { ...p, handRaised: message.isRaised } : p
@@ -888,26 +906,73 @@ export default function Room() {
     }
   };
 
+  const stopScreenShare = (source: 'manual' | 'browser') => {
+    if (!isScreenSharingRef.current) return;
+    
+    isScreenSharingRef.current = false;
+    setIsScreenSharing(false);
+    screenStream?.getTracks().forEach(track => track.stop());
+    setScreenStream(null);
+    
+    wsRef.current?.send(JSON.stringify({
+      type: "screen-share",
+      roomId,
+      participantId,
+      isSharing: false,
+    }));
+    
+    toast({
+      title: "Screen Sharing Stopped",
+      description: source === 'manual' 
+        ? "You stopped sharing your screen"
+        : "Screen sharing ended",
+    });
+  };
+
   const toggleScreenShare = async () => {
     if (isScreenSharing) {
-      screenStream?.getTracks().forEach(track => track.stop());
-      setScreenStream(null);
-      setIsScreenSharing(false);
+      stopScreenShare('manual');
     } else {
       try {
         const stream = await navigator.mediaDevices.getDisplayMedia({
-          video: { width: 1920, height: 1080 },
+          video: { 
+            width: { ideal: 1920 },
+            height: { ideal: 1080 },
+            frameRate: { ideal: 30 }
+          },
           audio: true,
         });
+        
         setScreenStream(stream);
         setIsScreenSharing(true);
+        isScreenSharingRef.current = true;
+        
+        wsRef.current?.send(JSON.stringify({
+          type: "screen-share",
+          roomId,
+          participantId,
+          isSharing: true,
+        }));
         
         stream.getVideoTracks()[0].onended = () => {
-          setIsScreenSharing(false);
-          setScreenStream(null);
+          if (isScreenSharingRef.current) {
+            stopScreenShare('browser');
+          }
         };
+        
+        toast({
+          title: "Screen Sharing Started",
+          description: "You are now sharing your screen",
+        });
       } catch (error) {
         console.error("Error sharing screen:", error);
+        if ((error as Error).name !== 'NotAllowedError') {
+          toast({
+            title: "Screen Share Failed",
+            description: "Could not start screen sharing",
+            variant: "destructive",
+          });
+        }
       }
     }
   };
