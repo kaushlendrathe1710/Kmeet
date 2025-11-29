@@ -832,6 +832,7 @@ export default function Room() {
       // === TURN OFF ===
       // 1. Stop background processor (clears internal video element srcObject)
       backgroundProcessorRef.current?.stopProcessing();
+      setBackgroundProcessedStream(null);
       
       // 2. Stop media processor video tracks
       mediaProcessorRef.current?.stopVideoTracks();
@@ -846,11 +847,27 @@ export default function Room() {
         });
       });
       
-      // 4. Stop all local video tracks
-      localStream?.getVideoTracks().forEach(t => t.stop());
-      processedStream?.getVideoTracks().forEach(t => t.stop());
-      backgroundProcessedStream?.getVideoTracks().forEach(t => t.stop());
-      setBackgroundProcessedStream(null);
+      // 4. Stop AND remove all video tracks from streams
+      if (localStream) {
+        const videoTracks = localStream.getVideoTracks();
+        videoTracks.forEach(t => {
+          t.stop();
+          localStream.removeTrack(t);
+        });
+        // Create new stream with only audio to help garbage collection
+        const audioOnly = new MediaStream(localStream.getAudioTracks());
+        setLocalStream(audioOnly);
+      }
+      
+      if (processedStream) {
+        const videoTracks = processedStream.getVideoTracks();
+        videoTracks.forEach(t => {
+          t.stop();
+          processedStream.removeTrack(t);
+        });
+        const audioOnly = new MediaStream(processedStream.getAudioTracks());
+        setProcessedStream(audioOnly);
+      }
       
       // 5. Update state
       setIsVideoEnabled(false);
