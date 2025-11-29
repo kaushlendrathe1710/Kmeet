@@ -765,7 +765,7 @@ export default function Room() {
     } else {
       // TURN ON: Request new microphone access
       try {
-        const newStream = await navigator.mediaDevices.getUserMedia({
+        const newMicStream = await navigator.mediaDevices.getUserMedia({
           audio: {
             echoCancellation: true,
             noiseSuppression: true,
@@ -773,20 +773,26 @@ export default function Room() {
           },
         });
         
-        const newAudioTrack = newStream.getAudioTracks()[0];
+        const newAudioTrack = newMicStream.getAudioTracks()[0];
         console.log(`✅ Got new audio track ${newAudioTrack.id}`);
         
-        // Add new track to localStream
+        // Create new streams with the new audio track to trigger React re-render
         if (localStream) {
-          localStream.addTrack(newAudioTrack);
+          const videoTracks = localStream.getVideoTracks();
+          const newLocalStream = new MediaStream([...videoTracks, newAudioTrack]);
+          setLocalStream(newLocalStream);
+          console.log(`✅ Created new localStream with audio track`);
         }
         
-        // Process through audio pipeline
+        // Process through audio pipeline and create new processed stream
         if (mediaProcessorRef.current && processedStream) {
-          const processedAudio = mediaProcessorRef.current.initializeAudioProcessing(newStream);
+          const processedAudio = mediaProcessorRef.current.initializeAudioProcessing(newMicStream);
           const processedAudioTrack = processedAudio.getAudioTracks()[0];
           if (processedAudioTrack) {
-            processedStream.addTrack(processedAudioTrack);
+            const videoTracks = processedStream.getVideoTracks();
+            const newProcessedStream = new MediaStream([...videoTracks, processedAudioTrack]);
+            setProcessedStream(newProcessedStream);
+            console.log(`✅ Created new processedStream with audio track`);
           }
         }
         
@@ -795,8 +801,8 @@ export default function Room() {
           if (peer._pc) {
             const senders = peer._pc.getSenders();
             senders.forEach((sender: RTCRtpSender) => {
-              if (sender.track?.kind === 'audio' || (!sender.track && sender.track === null)) {
-                sender.replaceTrack(newAudioTrack).catch(err => {
+              if (sender.track?.kind === 'audio') {
+                sender.replaceTrack(newAudioTrack.clone()).catch(err => {
                   console.error(`Failed to replace audio track for peer ${peerId}:`, err);
                 });
                 console.log(`✅ Replaced audio track for peer ${peerId}`);
@@ -855,21 +861,28 @@ export default function Room() {
     } else {
       // TURN ON: Request new camera access
       try {
-        const newStream = await navigator.mediaDevices.getUserMedia({
+        const newCameraStream = await navigator.mediaDevices.getUserMedia({
           video: { width: 1920, height: 1080 },
         });
         
-        const newVideoTrack = newStream.getVideoTracks()[0];
+        const newVideoTrack = newCameraStream.getVideoTracks()[0];
         console.log(`✅ Got new video track ${newVideoTrack.id}`);
         
-        // Add new track to localStream
+        // Create new streams with the new video track to trigger React re-render
         if (localStream) {
-          localStream.addTrack(newVideoTrack);
+          // Create a new MediaStream with all existing audio tracks + new video track
+          const audioTracks = localStream.getAudioTracks();
+          const newLocalStream = new MediaStream([...audioTracks, newVideoTrack]);
+          setLocalStream(newLocalStream);
+          console.log(`✅ Created new localStream with video track`);
         }
         
-        // Add to processedStream
         if (processedStream) {
-          processedStream.addTrack(newVideoTrack.clone());
+          // Create new processed stream with audio + cloned video
+          const audioTracks = processedStream.getAudioTracks();
+          const newProcessedStream = new MediaStream([...audioTracks, newVideoTrack.clone()]);
+          setProcessedStream(newProcessedStream);
+          console.log(`✅ Created new processedStream with video track`);
         }
         
         // Replace track in all peer connections
@@ -877,8 +890,8 @@ export default function Room() {
           if (peer._pc) {
             const senders = peer._pc.getSenders();
             senders.forEach((sender: RTCRtpSender) => {
-              if (sender.track?.kind === 'video' || (!sender.track && sender.track === null)) {
-                sender.replaceTrack(newVideoTrack).catch(err => {
+              if (sender.track?.kind === 'video') {
+                sender.replaceTrack(newVideoTrack.clone()).catch(err => {
                   console.error(`Failed to replace video track for peer ${peerId}:`, err);
                 });
                 console.log(`✅ Replaced video track for peer ${peerId}`);
