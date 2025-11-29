@@ -354,9 +354,19 @@ export default function Room() {
         pendingConnectionsRef.current = [];
         // Small delay to ensure state is updated
         setTimeout(() => {
+          // Create composite stream with video from original + audio from enhanced
+          const compositeStream = new MediaStream();
+          stream.getVideoTracks().forEach(track => {
+            if (track.readyState === 'live') compositeStream.addTrack(track);
+          });
+          (enhanced || stream).getAudioTracks().forEach(track => {
+            if (track.readyState === 'live') compositeStream.addTrack(track);
+          });
+          console.log(`📡 Composite stream for pending: ${compositeStream.getVideoTracks().length} video, ${compositeStream.getAudioTracks().length} audio`);
+          
           pendingParticipants.forEach(participant => {
             if (participant.id !== participantId && participant.approvalStatus === "approved") {
-              createPeerConnectionWithStream(participant.id, true, enhanced || stream);
+              createPeerConnectionWithStream(participant.id, true, compositeStream);
             }
           });
         }, 100);
@@ -411,6 +421,37 @@ export default function Room() {
     { urls: "stun:stun.l.google.com:19302" },
     { urls: "stun:stun1.l.google.com:19302" },
   ];
+
+  // Helper function to get outbound stream with both audio (from processedStream) and video (from localStream/backgroundProcessedStream)
+  const getOutboundStream = (): MediaStream | null => {
+    // Get video tracks from background processed stream or local stream
+    const videoSource = backgroundProcessedStream || localStream;
+    const videoTracks = videoSource?.getVideoTracks() || [];
+    
+    // Get audio tracks from processed stream (enhanced audio) or local stream
+    const audioSource = processedStream || localStream;
+    const audioTracks = audioSource?.getAudioTracks() || [];
+    
+    if (videoTracks.length === 0 && audioTracks.length === 0) {
+      return null;
+    }
+    
+    // Create a composite stream with both audio and video
+    const compositeStream = new MediaStream();
+    videoTracks.forEach(track => {
+      if (track.readyState === 'live') {
+        compositeStream.addTrack(track);
+      }
+    });
+    audioTracks.forEach(track => {
+      if (track.readyState === 'live') {
+        compositeStream.addTrack(track);
+      }
+    });
+    
+    console.log(`📡 Outbound stream: ${compositeStream.getVideoTracks().length} video, ${compositeStream.getAudioTracks().length} audio tracks`);
+    return compositeStream;
+  };
 
   // Helper function to create peer connection with a specific stream (used when stream is passed directly)
   const createPeerConnectionWithStream = (
@@ -597,9 +638,13 @@ export default function Room() {
     
     // If we receive an offer but don't have a peer, create one
     if (!peerData && signal.type === "offer") {
-      const stream = backgroundProcessedStream || processedStream || localStream;
-      if (!stream || !streamReadyRef.current) {
+      if (!streamReadyRef.current) {
         console.error("No local stream available for peer connection - stream not ready yet");
+        return;
+      }
+      const stream = getOutboundStream();
+      if (!stream) {
+        console.error("No outbound stream available for peer connection");
         return;
       }
       peerData = createPeerConnectionWithStream(fromParticipantId, false, stream);
@@ -638,11 +683,16 @@ export default function Room() {
 
   // Initiate connections to all existing participants
   const initiateConnections = useCallback((otherParticipants: Participant[]) => {
-    const stream = backgroundProcessedStream || processedStream || localStream;
-    
     // If stream isn't ready yet, queue the participants for later
-    if (!stream || !streamReadyRef.current) {
+    if (!streamReadyRef.current) {
       console.log("⏳ Stream not ready yet, queueing connections for:", otherParticipants.map(p => p.name).join(", "));
+      pendingConnectionsRef.current = [...pendingConnectionsRef.current, ...otherParticipants];
+      return;
+    }
+
+    const stream = getOutboundStream();
+    if (!stream) {
+      console.error("❌ No outbound stream available for initiating connections");
       pendingConnectionsRef.current = [...pendingConnectionsRef.current, ...otherParticipants];
       return;
     }
@@ -653,7 +703,7 @@ export default function Room() {
         createPeerConnectionWithStream(participant.id, true, stream);
       }
     });
-  }, [backgroundProcessedStream, processedStream, localStream, participantId]);
+  }, [participantId, backgroundProcessedStream, processedStream, localStream]);
 
   const connectWebSocket = () => {
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
@@ -785,10 +835,27 @@ export default function Room() {
         ));
         // Existing participants should initiate connection to newly approved participant
         if (message.participantId !== participantId) {
-          const stream = backgroundProcessedStream || processedStream || localStream;
-          if (stream && streamReadyRef.current) {
-            console.log(`🔗 Initiating connection to newly approved participant: ${message.participantId}`);
-            setTimeout(() => createPeerConnectionWithStream(message.participantId, true, stream), 500);
+          if (streamReadyRef.current) {
+            const stream = getOutboundStream();
+            if (stream) {
+              console.log(`🔗 Initiating connection to newly approved participant: ${message.participantId}`);
+              setTimeout(() => createPeerConnectionWithStream(message.participantId, true, stream), 500);
+            } else {
+              console.log("⏳ No outbound stream, queueing connection for newly approved participant");
+              pendingConnectionsRef.current.push({
+                id: message.participantId,
+                name: "Pending",
+                roomId: roomId,
+                isAudioEnabled: true,
+                isVideoEnabled: true,
+                isScreenSharing: false,
+                isHost: false,
+                approvalStatus: "approved",
+                handRaised: false,
+                canRecord: false,
+                joinedAt: Date.now(),
+              });
+            }
           } else {
             console.log("⏳ Stream not ready, queueing connection for newly approved participant");
             pendingConnectionsRef.current.push({
@@ -1637,7 +1704,8 @@ export default function Room() {
     return <WaitingRoom roomId={roomId} participantName={participantName} />;
   }
 
-  const pendingParticipants = participants.filter(p => p.approvalStatus === "pending");
+  // Filter out current user from pending list - you should never need to approve yourself!
+  const pendingParticipants = participants.filter(p => p.approvalStatus === "pending" && p.id !== participantId);
   const approvedParticipants = participants.filter(p => p.approvalStatus === "approved");
 
   return (
