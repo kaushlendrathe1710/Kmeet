@@ -109,6 +109,8 @@ export default function Room() {
   
   const wsRef = useRef<WebSocket | null>(null);
   const peersRef = useRef<Map<string, any>>(new Map());
+  const pendingConnectionsRef = useRef<Participant[]>([]);
+  const streamReadyRef = useRef<boolean>(false);
   const [primaryPeerConnection, setPrimaryPeerConnection] = useState<RTCPeerConnection | null>(null);
   const [duration, setDuration] = useState(0);
   const startTimeRef = useRef<number>(Date.now());
@@ -342,6 +344,23 @@ export default function Room() {
       
       setLocalStream(stream);
       setProcessedStream(enhanced);
+      streamReadyRef.current = true;
+      console.log("✅ Local stream ready, processing pending connections...");
+      
+      // Process any pending connections that were queued before stream was ready
+      if (pendingConnectionsRef.current.length > 0) {
+        console.log(`📋 Processing ${pendingConnectionsRef.current.length} pending connections`);
+        const pendingParticipants = [...pendingConnectionsRef.current];
+        pendingConnectionsRef.current = [];
+        // Small delay to ensure state is updated
+        setTimeout(() => {
+          pendingParticipants.forEach(participant => {
+            if (participant.id !== participantId && participant.approvalStatus === "approved") {
+              createPeerConnectionWithStream(participant.id, true, enhanced || stream);
+            }
+          });
+        }, 100);
+      }
 
       backgroundProcessorRef.current = new BackgroundProcessor();
       const initialized = await backgroundProcessorRef.current.initialize();
@@ -392,6 +411,99 @@ export default function Room() {
     { urls: "stun:stun.l.google.com:19302" },
     { urls: "stun:stun1.l.google.com:19302" },
   ];
+
+  // Helper function to create peer connection with a specific stream (used when stream is passed directly)
+  const createPeerConnectionWithStream = (
+    remoteParticipantId: string,
+    initiator: boolean,
+    stream: MediaStream
+  ) => {
+    console.log(`🔗 Creating peer connection to ${remoteParticipantId}, initiator: ${initiator}, stream tracks: ${stream.getTracks().length}`);
+    
+    // Don't create duplicate connections
+    if (peersRef.current.has(remoteParticipantId)) {
+      console.log(`Already have connection to ${remoteParticipantId}`);
+      return peersRef.current.get(remoteParticipantId);
+    }
+
+    const pc = new RTCPeerConnection({ iceServers });
+
+    // Add local tracks to the connection
+    stream.getTracks().forEach(track => {
+      console.log(`Adding track to peer connection: ${track.kind}`);
+      pc.addTrack(track, stream);
+    });
+
+    // Handle ICE candidates
+    pc.onicecandidate = (event) => {
+      if (event.candidate) {
+        console.log(`📤 Sending ICE candidate to ${remoteParticipantId}`);
+        wsRef.current?.send(JSON.stringify({
+          type: "signal",
+          roomId,
+          participantId,
+          targetId: remoteParticipantId,
+          signal: { type: "candidate", candidate: event.candidate },
+        }));
+      }
+    };
+
+    // Handle incoming remote tracks
+    pc.ontrack = (event) => {
+      console.log(`📥 Received track from ${remoteParticipantId}:`, event.track.kind, event.streams.length);
+      const remoteStream = event.streams[0];
+      if (remoteStream) {
+        console.log(`📥 Setting remote stream for ${remoteParticipantId}, tracks: ${remoteStream.getTracks().length}`);
+        setRemoteStreams(prev => {
+          const newMap = new Map(prev);
+          newMap.set(remoteParticipantId, remoteStream);
+          return newMap;
+        });
+      }
+    };
+
+    pc.onconnectionstatechange = () => {
+      console.log(`Connection state with ${remoteParticipantId}: ${pc.connectionState}`);
+      if (pc.connectionState === "connected") {
+        console.log(`✅ Successfully connected to ${remoteParticipantId}`);
+      }
+      if (pc.connectionState === "disconnected" || pc.connectionState === "failed" || pc.connectionState === "closed") {
+        peersRef.current.delete(remoteParticipantId);
+        setRemoteStreams(prev => {
+          const newMap = new Map(prev);
+          newMap.delete(remoteParticipantId);
+          return newMap;
+        });
+      }
+    };
+
+    pc.oniceconnectionstatechange = () => {
+      console.log(`ICE connection state with ${remoteParticipantId}: ${pc.iceConnectionState}`);
+    };
+
+    // Store the peer connection with metadata
+    const peerData = { _pc: pc, remoteId: remoteParticipantId };
+    peersRef.current.set(remoteParticipantId, peerData);
+
+    // If we're the initiator, create and send an offer
+    if (initiator) {
+      pc.createOffer()
+        .then(offer => pc.setLocalDescription(offer))
+        .then(() => {
+          console.log(`📤 Sending offer to ${remoteParticipantId}`);
+          wsRef.current?.send(JSON.stringify({
+            type: "signal",
+            roomId,
+            participantId,
+            targetId: remoteParticipantId,
+            signal: { type: "offer", sdp: pc.localDescription },
+          }));
+        })
+        .catch(err => console.error("Error creating offer:", err));
+    }
+
+    return peerData;
+  };
 
   // Create a WebRTC peer connection with another participant using native RTCPeerConnection
   const createPeerConnection = useCallback((
@@ -486,11 +598,11 @@ export default function Room() {
     // If we receive an offer but don't have a peer, create one
     if (!peerData && signal.type === "offer") {
       const stream = backgroundProcessedStream || processedStream || localStream;
-      if (!stream) {
-        console.error("No local stream available for peer connection");
+      if (!stream || !streamReadyRef.current) {
+        console.error("No local stream available for peer connection - stream not ready yet");
         return;
       }
-      peerData = createPeerConnection(fromParticipantId, false, stream);
+      peerData = createPeerConnectionWithStream(fromParticipantId, false, stream);
     }
     
     if (!peerData) {
@@ -522,22 +634,26 @@ export default function Room() {
       pc.addIceCandidate(new RTCIceCandidate(signal.candidate))
         .catch(err => console.error("Error adding ICE candidate:", err));
     }
-  }, [createPeerConnection, backgroundProcessedStream, processedStream, localStream, roomId, participantId]);
+  }, [backgroundProcessedStream, processedStream, localStream, roomId, participantId]);
 
   // Initiate connections to all existing participants
   const initiateConnections = useCallback((otherParticipants: Participant[]) => {
     const stream = backgroundProcessedStream || processedStream || localStream;
-    if (!stream) {
-      console.error("No local stream available for initiating connections");
+    
+    // If stream isn't ready yet, queue the participants for later
+    if (!stream || !streamReadyRef.current) {
+      console.log("⏳ Stream not ready yet, queueing connections for:", otherParticipants.map(p => p.name).join(", "));
+      pendingConnectionsRef.current = [...pendingConnectionsRef.current, ...otherParticipants];
       return;
     }
 
+    console.log("🚀 Initiating connections to:", otherParticipants.map(p => p.name).join(", "));
     otherParticipants.forEach(participant => {
       if (participant.id !== participantId && participant.approvalStatus === "approved") {
-        createPeerConnection(participant.id, true, stream);
+        createPeerConnectionWithStream(participant.id, true, stream);
       }
     });
-  }, [createPeerConnection, backgroundProcessedStream, processedStream, localStream, participantId]);
+  }, [backgroundProcessedStream, processedStream, localStream, participantId]);
 
   const connectWebSocket = () => {
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
@@ -670,8 +786,24 @@ export default function Room() {
         // Existing participants should initiate connection to newly approved participant
         if (message.participantId !== participantId) {
           const stream = backgroundProcessedStream || processedStream || localStream;
-          if (stream) {
-            setTimeout(() => createPeerConnection(message.participantId, true, stream), 500);
+          if (stream && streamReadyRef.current) {
+            console.log(`🔗 Initiating connection to newly approved participant: ${message.participantId}`);
+            setTimeout(() => createPeerConnectionWithStream(message.participantId, true, stream), 500);
+          } else {
+            console.log("⏳ Stream not ready, queueing connection for newly approved participant");
+            pendingConnectionsRef.current.push({
+              id: message.participantId,
+              name: "Pending",
+              roomId: roomId,
+              isAudioEnabled: true,
+              isVideoEnabled: true,
+              isScreenSharing: false,
+              isHost: false,
+              approvalStatus: "approved",
+              handRaised: false,
+              canRecord: false,
+              joinedAt: Date.now(),
+            });
           }
         }
         break;
