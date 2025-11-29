@@ -830,80 +830,53 @@ export default function Room() {
     }
   };
 
-  const toggleVideo = async () => {
-    if (isVideoEnabled) {
-      console.log("📷 Turning OFF camera - STOPPING ALL VIDEO TRACKS NOW...");
-      
-      localStream?.getVideoTracks().forEach(track => {
-        console.log("🛑 Stopping localStream video track:", track.id);
-        track.stop();
-      });
-      
-      processedStream?.getVideoTracks().forEach(track => {
-        console.log("🛑 Stopping processedStream video track:", track.id);
-        track.stop();
-      });
-
-      const audioTracks = processedStream?.getAudioTracks() || localStream?.getAudioTracks() || [];
-      const newStream = new MediaStream(audioTracks);
-      setLocalStream(new MediaStream(localStream?.getAudioTracks() || []));
-      setProcessedStream(newStream);
-      setIsVideoEnabled(false);
-      
-      wsRef.current?.send(JSON.stringify({
-        type: "toggle-video",
-        roomId,
-        participantId,
-        isEnabled: false,
-      }));
-      
-      setParticipants(prev => prev.map(p => 
-        p.id === participantId ? { ...p, isVideoEnabled: false } : p
-      ));
-      
-      console.log("✅ ALL camera tracks STOPPED - device is OFF");
-    } else {
-      console.log("📹 Turning ON camera - STARTING DEVICE NOW...");
-      
-      try {
-        const videoStream = await navigator.mediaDevices.getUserMedia({
-          video: { width: 1920, height: 1080 },
-        });
-
-        const videoTrack = videoStream.getVideoTracks()[0];
-        console.log("✅ New camera track started:", videoTrack.id);
-        
-        const currentAudioTracks = localStream?.getAudioTracks() || [];
-        const newLocalStream = new MediaStream([...currentAudioTracks, videoTrack]);
-        setLocalStream(newLocalStream);
-
-        const processedAudioTracks = processedStream?.getAudioTracks() || [];
-        const newProcessedStream = new MediaStream([...processedAudioTracks, videoTrack]);
-        setProcessedStream(newProcessedStream);
-
-        setIsVideoEnabled(true);
-        
-        wsRef.current?.send(JSON.stringify({
-          type: "toggle-video",
-          roomId,
-          participantId,
-          isEnabled: true,
-        }));
-        
-        setParticipants(prev => prev.map(p => 
-          p.id === participantId ? { ...p, isVideoEnabled: true } : p
-        ));
-        
-        console.log("✅ Camera is ON and working");
-      } catch (error) {
-        console.error("❌ Error enabling video:", error);
-        toast({
-          title: "Camera Error",
-          description: "Could not access camera.",
-          variant: "destructive",
+  const toggleVideo = () => {
+    const newVideoState = !isVideoEnabled;
+    console.log(`📷 Toggling camera: ${isVideoEnabled ? 'OFF' : 'ON'}`);
+    
+    // Disable/enable video tracks on all streams (soft mute - doesn't stop the device)
+    localStream?.getVideoTracks().forEach(track => {
+      track.enabled = newVideoState;
+      console.log(`${newVideoState ? '✅' : '🛑'} localStream video track ${track.id}: enabled=${newVideoState}`);
+    });
+    
+    processedStream?.getVideoTracks().forEach(track => {
+      track.enabled = newVideoState;
+      console.log(`${newVideoState ? '✅' : '🛑'} processedStream video track ${track.id}: enabled=${newVideoState}`);
+    });
+    
+    backgroundProcessedStream?.getVideoTracks().forEach(track => {
+      track.enabled = newVideoState;
+      console.log(`${newVideoState ? '✅' : '🛑'} backgroundProcessedStream video track ${track.id}: enabled=${newVideoState}`);
+    });
+    
+    // Update peer connection senders to reflect the video state
+    peersRef.current.forEach((peer, peerId) => {
+      if (peer._pc) {
+        const senders = peer._pc.getSenders();
+        senders.forEach((sender: RTCRtpSender) => {
+          if (sender.track?.kind === 'video') {
+            sender.track.enabled = newVideoState;
+            console.log(`${newVideoState ? '✅' : '🛑'} Peer ${peerId} sender track: enabled=${newVideoState}`);
+          }
         });
       }
-    }
+    });
+
+    setIsVideoEnabled(newVideoState);
+    
+    wsRef.current?.send(JSON.stringify({
+      type: "toggle-video",
+      roomId,
+      participantId,
+      isEnabled: newVideoState,
+    }));
+    
+    setParticipants(prev => prev.map(p => 
+      p.id === participantId ? { ...p, isVideoEnabled: newVideoState } : p
+    ));
+    
+    console.log(`✅ Camera is now ${newVideoState ? 'ON' : 'OFF'}`);
   };
 
   const stopScreenShare = (source: 'manual' | 'browser') => {
