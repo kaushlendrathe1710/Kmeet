@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useRoute, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -387,6 +387,158 @@ export default function Room() {
     setVideoSettings(settings);
   };
 
+  // ICE server configuration for WebRTC
+  const iceServers: RTCIceServer[] = [
+    { urls: "stun:stun.l.google.com:19302" },
+    { urls: "stun:stun1.l.google.com:19302" },
+  ];
+
+  // Create a WebRTC peer connection with another participant using native RTCPeerConnection
+  const createPeerConnection = useCallback((
+    remoteParticipantId: string,
+    initiator: boolean,
+    stream: MediaStream
+  ) => {
+    console.log(`🔗 Creating peer connection to ${remoteParticipantId}, initiator: ${initiator}`);
+    
+    // Don't create duplicate connections
+    if (peersRef.current.has(remoteParticipantId)) {
+      console.log(`Already have connection to ${remoteParticipantId}`);
+      return peersRef.current.get(remoteParticipantId);
+    }
+
+    const pc = new RTCPeerConnection({ iceServers });
+
+    // Add local tracks to the connection
+    stream.getTracks().forEach(track => {
+      pc.addTrack(track, stream);
+    });
+
+    // Handle ICE candidates
+    pc.onicecandidate = (event) => {
+      if (event.candidate) {
+        console.log(`📤 Sending ICE candidate to ${remoteParticipantId}`);
+        wsRef.current?.send(JSON.stringify({
+          type: "signal",
+          roomId,
+          participantId,
+          targetId: remoteParticipantId,
+          signal: { type: "candidate", candidate: event.candidate },
+        }));
+      }
+    };
+
+    // Handle incoming remote tracks
+    pc.ontrack = (event) => {
+      console.log(`📥 Received track from ${remoteParticipantId}:`, event.track.kind);
+      const remoteStream = event.streams[0];
+      if (remoteStream) {
+        setRemoteStreams(prev => {
+          const newMap = new Map(prev);
+          newMap.set(remoteParticipantId, remoteStream);
+          return newMap;
+        });
+      }
+    };
+
+    pc.onconnectionstatechange = () => {
+      console.log(`Connection state with ${remoteParticipantId}: ${pc.connectionState}`);
+      if (pc.connectionState === "disconnected" || pc.connectionState === "failed" || pc.connectionState === "closed") {
+        peersRef.current.delete(remoteParticipantId);
+        setRemoteStreams(prev => {
+          const newMap = new Map(prev);
+          newMap.delete(remoteParticipantId);
+          return newMap;
+        });
+      }
+    };
+
+    // Store the peer connection with metadata
+    const peerData = { _pc: pc, remoteId: remoteParticipantId };
+    peersRef.current.set(remoteParticipantId, peerData);
+
+    // If we're the initiator, create and send an offer
+    if (initiator) {
+      pc.createOffer()
+        .then(offer => pc.setLocalDescription(offer))
+        .then(() => {
+          console.log(`📤 Sending offer to ${remoteParticipantId}`);
+          wsRef.current?.send(JSON.stringify({
+            type: "signal",
+            roomId,
+            participantId,
+            targetId: remoteParticipantId,
+            signal: { type: "offer", sdp: pc.localDescription },
+          }));
+        })
+        .catch(err => console.error("Error creating offer:", err));
+    }
+
+    return peerData;
+  }, [roomId, participantId]);
+
+  // Handle incoming signaling data (offers, answers, ICE candidates)
+  const handleSignal = useCallback((fromParticipantId: string, signal: { type: string; sdp?: RTCSessionDescription; candidate?: RTCIceCandidate }) => {
+    console.log(`📥 Received signal from ${fromParticipantId}:`, signal.type);
+    
+    let peerData = peersRef.current.get(fromParticipantId);
+    
+    // If we receive an offer but don't have a peer, create one
+    if (!peerData && signal.type === "offer") {
+      const stream = backgroundProcessedStream || processedStream || localStream;
+      if (!stream) {
+        console.error("No local stream available for peer connection");
+        return;
+      }
+      peerData = createPeerConnection(fromParticipantId, false, stream);
+    }
+    
+    if (!peerData) {
+      console.error("No peer connection for signal from:", fromParticipantId);
+      return;
+    }
+
+    const pc = peerData._pc as RTCPeerConnection;
+    
+    if (signal.type === "offer" && signal.sdp) {
+      pc.setRemoteDescription(new RTCSessionDescription(signal.sdp))
+        .then(() => pc.createAnswer())
+        .then(answer => pc.setLocalDescription(answer))
+        .then(() => {
+          console.log(`📤 Sending answer to ${fromParticipantId}`);
+          wsRef.current?.send(JSON.stringify({
+            type: "signal",
+            roomId,
+            participantId,
+            targetId: fromParticipantId,
+            signal: { type: "answer", sdp: pc.localDescription },
+          }));
+        })
+        .catch(err => console.error("Error handling offer:", err));
+    } else if (signal.type === "answer" && signal.sdp) {
+      pc.setRemoteDescription(new RTCSessionDescription(signal.sdp))
+        .catch(err => console.error("Error setting remote description:", err));
+    } else if (signal.type === "candidate" && signal.candidate) {
+      pc.addIceCandidate(new RTCIceCandidate(signal.candidate))
+        .catch(err => console.error("Error adding ICE candidate:", err));
+    }
+  }, [createPeerConnection, backgroundProcessedStream, processedStream, localStream, roomId, participantId]);
+
+  // Initiate connections to all existing participants
+  const initiateConnections = useCallback((otherParticipants: Participant[]) => {
+    const stream = backgroundProcessedStream || processedStream || localStream;
+    if (!stream) {
+      console.error("No local stream available for initiating connections");
+      return;
+    }
+
+    otherParticipants.forEach(participant => {
+      if (participant.id !== participantId && participant.approvalStatus === "approved") {
+        createPeerConnection(participant.id, true, stream);
+      }
+    });
+  }, [createPeerConnection, backgroundProcessedStream, processedStream, localStream, participantId]);
+
   const connectWebSocket = () => {
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
     const host = window.location.host;
@@ -483,6 +635,13 @@ export default function Room() {
           title: "Approved!",
           description: "You have been approved to join the meeting",
         });
+        // Initiate WebRTC connections to other approved participants
+        const approvedParticipants = message.participants.filter(
+          (p: Participant) => p.id !== participantId && p.approvalStatus === "approved"
+        );
+        if (approvedParticipants.length > 0) {
+          setTimeout(() => initiateConnections(approvedParticipants), 500);
+        }
         break;
 
       case "approval-denied":
@@ -508,6 +667,13 @@ export default function Room() {
         setParticipants(prev => prev.map(p =>
           p.id === message.participantId ? { ...p, approvalStatus: "approved" } : p
         ));
+        // Existing participants should initiate connection to newly approved participant
+        if (message.participantId !== participantId) {
+          const stream = backgroundProcessedStream || processedStream || localStream;
+          if (stream) {
+            setTimeout(() => createPeerConnection(message.participantId, true, stream), 500);
+          }
+        }
         break;
 
       case "participant-denied":
@@ -549,6 +715,19 @@ export default function Room() {
         // Set canRecord from participant data (host gets it automatically)
         const self = message.participants.find((p: any) => p.id === participantId);
         if (self) setCanRecord(self.canRecord || false);
+        // Initiate WebRTC connections to other approved participants
+        const otherParticipants = message.participants.filter(
+          (p: Participant) => p.id !== participantId && p.approvalStatus === "approved"
+        );
+        if (otherParticipants.length > 0) {
+          // Small delay to ensure local stream is ready
+          setTimeout(() => initiateConnections(otherParticipants), 500);
+        }
+        break;
+
+      case "signal":
+        // Handle incoming WebRTC signaling data
+        handleSignal(message.participantId, message.signal);
         break;
       
       case "chat-message":
