@@ -750,6 +750,8 @@ export default function Room() {
     
     if (isAudioEnabled) {
       // TURN OFF: Stop the microphone hardware completely
+      // Must stop ALL audio tracks including clones in peer connections
+      
       localStream?.getAudioTracks().forEach(track => {
         track.stop();
         console.log(`🛑 Stopped localStream audio track ${track.id}`);
@@ -758,6 +760,19 @@ export default function Room() {
       processedStream?.getAudioTracks().forEach(track => {
         track.stop();
         console.log(`🛑 Stopped processedStream audio track ${track.id}`);
+      });
+      
+      // CRITICAL: Also stop audio tracks in peer connection senders (these are clones)
+      peersRef.current.forEach((peer, peerId) => {
+        if (peer._pc) {
+          const senders = peer._pc.getSenders();
+          senders.forEach((sender: RTCRtpSender) => {
+            if (sender.track?.kind === 'audio') {
+              sender.track.stop();
+              console.log(`🛑 Stopped peer ${peerId} sender audio track ${sender.track.id}`);
+            }
+          });
+        }
       });
       
       setIsAudioEnabled(false);
@@ -841,6 +856,8 @@ export default function Room() {
     
     if (isVideoEnabled) {
       // TURN OFF: Stop the camera hardware completely
+      // Must stop ALL video tracks including clones in peer connections
+      
       localStream?.getVideoTracks().forEach(track => {
         track.stop();
         console.log(`🛑 Stopped localStream video track ${track.id}`);
@@ -854,6 +871,19 @@ export default function Room() {
       backgroundProcessedStream?.getVideoTracks().forEach(track => {
         track.stop();
         console.log(`🛑 Stopped backgroundProcessedStream video track ${track.id}`);
+      });
+      
+      // CRITICAL: Also stop video tracks in peer connection senders (these are clones)
+      peersRef.current.forEach((peer, peerId) => {
+        if (peer._pc) {
+          const senders = peer._pc.getSenders();
+          senders.forEach((sender: RTCRtpSender) => {
+            if (sender.track?.kind === 'video') {
+              sender.track.stop();
+              console.log(`🛑 Stopped peer ${peerId} sender video track ${sender.track.id}`);
+            }
+          });
+        }
       });
       
       setIsVideoEnabled(false);
