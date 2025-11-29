@@ -119,15 +119,21 @@ export default function Home() {
     } else {
       // TURN ON: Request new camera access
       try {
-        const newStream = await navigator.mediaDevices.getUserMedia({
+        const newVideoStream = await navigator.mediaDevices.getUserMedia({
           video: selectedVideo ? { deviceId: { exact: selectedVideo } } : true,
         });
         
-        const newVideoTrack = newStream.getVideoTracks()[0];
-        stream.addTrack(newVideoTrack);
+        const newVideoTrack = newVideoStream.getVideoTracks()[0];
+        
+        // Create a new stream with the new video track + existing audio tracks
+        const existingAudioTracks = stream.getAudioTracks();
+        const combinedStream = new MediaStream([newVideoTrack, ...existingAudioTracks]);
+        
+        // Update stream state (triggers React re-render)
+        setStream(combinedStream);
         
         if (videoRef.current) {
-          videoRef.current.srcObject = stream;
+          videoRef.current.srcObject = combinedStream;
         }
         
         setIsVideoEnabled(true);
@@ -158,12 +164,22 @@ export default function Home() {
     } else {
       // TURN ON: Request new microphone access
       try {
-        const newStream = await navigator.mediaDevices.getUserMedia({
+        const newAudioStream = await navigator.mediaDevices.getUserMedia({
           audio: selectedAudio ? { deviceId: { exact: selectedAudio } } : true,
         });
         
-        const newAudioTrack = newStream.getAudioTracks()[0];
-        stream.addTrack(newAudioTrack);
+        const newAudioTrack = newAudioStream.getAudioTracks()[0];
+        
+        // Create a new stream with existing video tracks + new audio track
+        const existingVideoTracks = stream.getVideoTracks();
+        const combinedStream = new MediaStream([...existingVideoTracks, newAudioTrack]);
+        
+        // Update stream state (triggers React re-render)
+        setStream(combinedStream);
+        
+        if (videoRef.current && existingVideoTracks.length > 0) {
+          videoRef.current.srcObject = combinedStream;
+        }
         
         setIsAudioEnabled(true);
         console.log("Preview microphone ON (hardware active)");

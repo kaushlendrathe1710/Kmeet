@@ -147,32 +147,40 @@ Key features include:
 
 ## Media Controls Implementation
 
-### Camera Toggle (toggleVideo)
-- Uses `track.enabled = false/true` for soft mute (preserves device for instant re-enable)
-- Disables/enables tracks on ALL streams: `localStream`, `processedStream`, `backgroundProcessedStream`
-- Updates peer connection senders via `peer._pc.getSenders()` for remote sync
+### Camera Toggle (toggleVideo) - Google Meet/Zoom Style
+- **Turn OFF**: Uses `track.stop()` to completely release camera hardware (LED turns OFF)
+  - Removes tracks from all streams: `localStream`, `processedStream`, `backgroundProcessedStream`
+  - Clears background processed stream
+- **Turn ON**: Uses `getUserMedia()` to request fresh camera access
+  - Creates new MediaStream objects to trigger React re-render
+  - Replaces tracks in all peer connections via `sender.replaceTrack()`
+  - Camera LED turns back ON
 - Broadcasts "toggle-video" WebSocket message to all participants
-- **Important**: Does NOT use `track.stop()` which would permanently stop the device
-
-### Microphone Toggle (toggleAudio)
-- Uses `track.enabled = false/true` for soft mute (preserves device for instant re-enable)
-- Disables/enables tracks on: `localStream`, `processedStream`
-- Updates peer connection senders via `peer._pc.getSenders()` for remote sync
+### Microphone Toggle (toggleAudio) - Google Meet/Zoom Style
+- **Turn OFF**: Uses `track.stop()` to completely release microphone hardware
+  - Removes tracks from: `localStream`, `processedStream`
+- **Turn ON**: Uses `getUserMedia()` to request fresh microphone access
+  - Processes audio through MediaProcessor for noise suppression/enhancement
+  - Creates new MediaStream objects to trigger React re-render
+  - Replaces tracks in all peer connections via `sender.replaceTrack()`
 - Broadcasts "toggle-audio" WebSocket message to all participants
-- **Important**: Does NOT use `track.stop()` which would permanently stop the device
 
 ### Multi-Participant Sync
 - WebSocket broadcasts ensure all participants see media state changes
-- Peer connection senders are updated directly for immediate effect on remote views
+- Peer connection senders are updated via `sender.replaceTrack()` for immediate effect on remote views
+- New MediaStream objects trigger React re-renders for proper video element updates
 - State sync typically completes within 1-2 seconds
 
 ## Recent Changes
 
-### November 29, 2025
-- **Camera Toggle Fix**: Changed from `track.stop()` to `track.enabled = false` for proper soft mute
-- **Microphone Toggle Fix**: Changed from `track.stop()` to `track.enabled = false` for proper soft mute
-- **Peer Connection Sync**: Added sender track updates via `peer._pc.getSenders()` for both audio and video
-- **Background Stream Support**: Camera toggle now also handles `backgroundProcessedStream` for virtual backgrounds
+### November 29, 2025 (Latest)
+- **Camera/Mic Toggle Rewrite**: Now works exactly like Google Meet and Zoom
+  - OFF: `track.stop()` releases hardware (camera LED turns off)
+  - ON: `getUserMedia()` requests fresh access (camera LED turns on)
+  - New MediaStream objects ensure React re-renders properly
+  - Peer connection track replacement for multi-participant sync
+- **Host Auto-Promotion**: First person to join an empty room becomes host automatically
+- **Stale Participant Cleanup**: Removes disconnected participants when no active host exists
 
 ### November 4, 2025
 - **Screen Sharing**: Implemented ref-based state tracking to prevent duplicate notifications
