@@ -782,20 +782,24 @@ export default function Room() {
         const stream = await navigator.mediaDevices.getUserMedia({
           audio: { echoCancellation: true, noiseSuppression: true, sampleRate: 48000 },
         });
-        const newTrack = stream.getAudioTracks()[0];
+        const newAudioTrack = stream.getAudioTracks()[0];
         
-        // Get existing video tracks
-        const videoTracks = localStream?.getVideoTracks() || [];
+        // Get ONLY live video tracks (not stopped ones)
+        const liveVideoTracks = (localStream?.getVideoTracks() || [])
+          .filter(t => t.readyState === 'live');
         
-        // Create fresh streams with existing video + new audio
-        const newLocalStream = new MediaStream([...videoTracks, newTrack]);
-        const newProcessedStream = new MediaStream([...videoTracks.map(t => t.clone()), newTrack.clone()]);
+        // Create fresh streams with any live video + new audio
+        const newLocalStream = new MediaStream([...liveVideoTracks, newAudioTrack]);
+        const newProcessedStream = new MediaStream([
+          ...liveVideoTracks.map(t => t.clone()), 
+          newAudioTrack.clone()
+        ]);
         
         // Update peer connections
         peersRef.current.forEach((peer) => {
           peer._pc?.getSenders().forEach((sender: RTCRtpSender) => {
             if (!sender.track || sender.track.kind === 'audio') {
-              sender.replaceTrack(newTrack.clone());
+              sender.replaceTrack(newAudioTrack.clone());
             }
           });
         });
@@ -862,20 +866,24 @@ export default function Room() {
         const stream = await navigator.mediaDevices.getUserMedia({
           video: { width: 1920, height: 1080 },
         });
-        const newTrack = stream.getVideoTracks()[0];
+        const newVideoTrack = stream.getVideoTracks()[0];
         
-        // Get existing audio tracks
-        const audioTracks = localStream?.getAudioTracks() || [];
+        // Get ONLY live audio tracks (not stopped ones)
+        const liveAudioTracks = (localStream?.getAudioTracks() || [])
+          .filter(t => t.readyState === 'live');
         
-        // Create fresh streams with new video + existing audio
-        const newLocalStream = new MediaStream([newTrack, ...audioTracks]);
-        const newProcessedStream = new MediaStream([newTrack.clone(), ...audioTracks.map(t => t.clone())]);
+        // Create fresh streams with new video + any live audio
+        const newLocalStream = new MediaStream([newVideoTrack, ...liveAudioTracks]);
+        const newProcessedStream = new MediaStream([
+          newVideoTrack.clone(), 
+          ...liveAudioTracks.map(t => t.clone())
+        ]);
         
         // Update peer connections
         peersRef.current.forEach((peer) => {
           peer._pc?.getSenders().forEach((sender: RTCRtpSender) => {
             if (!sender.track || sender.track.kind === 'video') {
-              sender.replaceTrack(newTrack.clone());
+              sender.replaceTrack(newVideoTrack.clone());
             }
           });
         });
