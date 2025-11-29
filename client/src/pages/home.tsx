@@ -104,47 +104,26 @@ export default function Home() {
     if (!stream) return;
 
     if (isVideoEnabled) {
-      // TURN OFF: Stop camera hardware completely (LED goes dark)
-      stream.getVideoTracks().forEach(track => {
-        track.stop();
-        stream.removeTrack(track);
-      });
-      
-      if (videoRef.current) {
-        videoRef.current.srcObject = null;
-      }
-      
+      // TURN OFF: Stop camera hardware
+      stream.getVideoTracks().forEach(track => track.stop());
+      if (videoRef.current) videoRef.current.srcObject = null;
       setIsVideoEnabled(false);
-      console.log("Preview camera OFF (hardware released)");
+      console.log("Camera OFF");
     } else {
-      // TURN ON: Request new camera access
+      // TURN ON: Get fresh camera
       try {
-        const newVideoStream = await navigator.mediaDevices.getUserMedia({
+        const newStream = await navigator.mediaDevices.getUserMedia({
           video: selectedVideo ? { deviceId: { exact: selectedVideo } } : true,
         });
-        
-        const newVideoTrack = newVideoStream.getVideoTracks()[0];
-        
-        // Create a new stream with the new video track + existing audio tracks
-        const existingAudioTracks = stream.getAudioTracks();
-        const combinedStream = new MediaStream([newVideoTrack, ...existingAudioTracks]);
-        
-        // Update stream state (triggers React re-render)
-        setStream(combinedStream);
-        
-        if (videoRef.current) {
-          videoRef.current.srcObject = combinedStream;
-        }
-        
+        const newVideoTrack = newStream.getVideoTracks()[0];
+        const combined = new MediaStream([newVideoTrack, ...stream.getAudioTracks()]);
+        setStream(combined);
+        if (videoRef.current) videoRef.current.srcObject = combined;
         setIsVideoEnabled(true);
-        console.log("Preview camera ON (hardware active)");
+        console.log("Camera ON");
       } catch (err) {
-        console.error("Error re-enabling camera:", err);
-        toast({
-          title: "Camera Error",
-          description: "Cannot turn the camera back on. Please check permissions.",
-          variant: "destructive",
-        });
+        console.error("Camera error:", err);
+        toast({ title: "Camera Error", description: "Cannot access camera.", variant: "destructive" });
       }
     }
   };
@@ -153,43 +132,25 @@ export default function Home() {
     if (!stream) return;
 
     if (isAudioEnabled) {
-      // TURN OFF: Stop microphone hardware completely
-      stream.getAudioTracks().forEach(track => {
-        track.stop();
-        stream.removeTrack(track);
-      });
-      
+      // TURN OFF: Stop microphone hardware
+      stream.getAudioTracks().forEach(track => track.stop());
       setIsAudioEnabled(false);
-      console.log("Preview microphone OFF (hardware released)");
+      console.log("Microphone OFF");
     } else {
-      // TURN ON: Request new microphone access
+      // TURN ON: Get fresh microphone
       try {
-        const newAudioStream = await navigator.mediaDevices.getUserMedia({
+        const newStream = await navigator.mediaDevices.getUserMedia({
           audio: selectedAudio ? { deviceId: { exact: selectedAudio } } : true,
         });
-        
-        const newAudioTrack = newAudioStream.getAudioTracks()[0];
-        
-        // Create a new stream with existing video tracks + new audio track
-        const existingVideoTracks = stream.getVideoTracks();
-        const combinedStream = new MediaStream([...existingVideoTracks, newAudioTrack]);
-        
-        // Update stream state (triggers React re-render)
-        setStream(combinedStream);
-        
-        if (videoRef.current && existingVideoTracks.length > 0) {
-          videoRef.current.srcObject = combinedStream;
-        }
-        
+        const newAudioTrack = newStream.getAudioTracks()[0];
+        const combined = new MediaStream([...stream.getVideoTracks(), newAudioTrack]);
+        setStream(combined);
+        if (videoRef.current) videoRef.current.srcObject = combined;
         setIsAudioEnabled(true);
-        console.log("Preview microphone ON (hardware active)");
+        console.log("Microphone ON");
       } catch (err) {
-        console.error("Error re-enabling microphone:", err);
-        toast({
-          title: "Microphone Error",
-          description: "Cannot turn the microphone back on. Please check permissions.",
-          variant: "destructive",
-        });
+        console.error("Microphone error:", err);
+        toast({ title: "Microphone Error", description: "Cannot access microphone.", variant: "destructive" });
       }
     }
   };
