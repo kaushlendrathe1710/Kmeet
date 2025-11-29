@@ -188,6 +188,12 @@ function VideoTile({ participant, stream, isSelf, videoSettings, isActiveSpeaker
     if (videoRef.current && stream) {
       videoRef.current.srcObject = stream;
     }
+    // Cleanup: clear srcObject when unmounting or stream changes
+    return () => {
+      if (videoRef.current) {
+        videoRef.current.srcObject = null;
+      }
+    };
   }, [stream]);
 
   useEffect(() => {

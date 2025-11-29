@@ -94,7 +94,32 @@ export class MediaProcessor {
     }
   }
 
+  // Stop and remove all video tracks from the output stream
+  stopVideoTracks() {
+    if (this.destinationNode) {
+      this.destinationNode.stream.getVideoTracks().forEach(track => {
+        track.stop();
+        this.destinationNode!.stream.removeTrack(track);
+      });
+    }
+  }
+
+  // Add a new video track to the output stream
+  addVideoTrack(track: MediaStreamTrack) {
+    if (this.destinationNode) {
+      // Remove any existing video tracks first
+      this.destinationNode.stream.getVideoTracks().forEach(t => {
+        this.destinationNode!.stream.removeTrack(t);
+      });
+      this.destinationNode.stream.addTrack(track);
+    }
+  }
+
   cleanup() {
+    // Stop all tracks on destination stream first
+    if (this.destinationNode) {
+      this.destinationNode.stream.getTracks().forEach(track => track.stop());
+    }
     if (this.sourceNode) {
       this.sourceNode.disconnect();
     }
