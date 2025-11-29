@@ -745,89 +745,48 @@ export default function Room() {
     });
   };
 
-  const toggleAudio = async () => {
-    if (isAudioEnabled) {
-      console.log("🔇 Turning OFF microphone - STOPPING ALL AUDIO TRACKS NOW...");
-      
-      localStream?.getAudioTracks().forEach(track => {
-        console.log("🛑 Stopping localStream audio track:", track.id);
-        track.stop();
-      });
-      
-      processedStream?.getAudioTracks().forEach(track => {
-        console.log("🛑 Stopping processedStream audio track:", track.id);
-        track.stop();
-      });
-
-      if (mediaProcessorRef.current) {
-        mediaProcessorRef.current.cleanup();
-        mediaProcessorRef.current = null;
-      }
-
-      const videoTracks = localStream?.getVideoTracks() || [];
-      const newStream = new MediaStream(videoTracks);
-      setLocalStream(newStream);
-      setProcessedStream(newStream);
-      setIsAudioEnabled(false);
-      
-      wsRef.current?.send(JSON.stringify({
-        type: "toggle-audio",
-        roomId,
-        participantId,
-        isEnabled: false,
-      }));
-      
-      setParticipants(prev => prev.map(p => 
-        p.id === participantId ? { ...p, isAudioEnabled: false } : p
-      ));
-      
-      console.log("✅ ALL microphone tracks STOPPED - device is OFF");
-    } else {
-      console.log("🎤 Turning ON microphone - STARTING DEVICE NOW...");
-      
-      try {
-        const audioStream = await navigator.mediaDevices.getUserMedia({
-          audio: {
-            echoCancellation: true,
-            noiseSuppression: true,
-            sampleRate: 48000,
-          },
-        });
-
-        const audioTrack = audioStream.getAudioTracks()[0];
-        console.log("✅ New microphone track started:", audioTrack.id);
-        
-        const videoTracks = localStream?.getVideoTracks() || [];
-        const newStream = new MediaStream([...videoTracks, audioTrack]);
-        setLocalStream(newStream);
-
-        mediaProcessorRef.current = new MediaProcessor();
-        const newProcessed = mediaProcessorRef.current.initializeAudioProcessing(newStream);
-        setProcessedStream(newProcessed);
-
-        setIsAudioEnabled(true);
-        
-        wsRef.current?.send(JSON.stringify({
-          type: "toggle-audio",
-          roomId,
-          participantId,
-          isEnabled: true,
-        }));
-        
-        setParticipants(prev => prev.map(p => 
-          p.id === participantId ? { ...p, isAudioEnabled: true } : p
-        ));
-        
-        console.log("✅ Microphone is ON and working");
-      } catch (error) {
-        console.error("❌ Error enabling audio:", error);
-        toast({
-          title: "Microphone Error",
-          description: "Could not access microphone.",
-          variant: "destructive",
+  const toggleAudio = () => {
+    const newAudioState = !isAudioEnabled;
+    console.log(`🎤 Toggling microphone: ${isAudioEnabled ? 'OFF' : 'ON'}`);
+    
+    // Disable/enable audio tracks on all streams (soft mute - doesn't stop the device)
+    localStream?.getAudioTracks().forEach(track => {
+      track.enabled = newAudioState;
+      console.log(`${newAudioState ? '✅' : '🛑'} localStream audio track ${track.id}: enabled=${newAudioState}`);
+    });
+    
+    processedStream?.getAudioTracks().forEach(track => {
+      track.enabled = newAudioState;
+      console.log(`${newAudioState ? '✅' : '🛑'} processedStream audio track ${track.id}: enabled=${newAudioState}`);
+    });
+    
+    // Update peer connection senders to reflect the audio state
+    peersRef.current.forEach((peer, peerId) => {
+      if (peer._pc) {
+        const senders = peer._pc.getSenders();
+        senders.forEach((sender: RTCRtpSender) => {
+          if (sender.track?.kind === 'audio') {
+            sender.track.enabled = newAudioState;
+            console.log(`${newAudioState ? '✅' : '🛑'} Peer ${peerId} audio sender track: enabled=${newAudioState}`);
+          }
         });
       }
-    }
+    });
+
+    setIsAudioEnabled(newAudioState);
+    
+    wsRef.current?.send(JSON.stringify({
+      type: "toggle-audio",
+      roomId,
+      participantId,
+      isEnabled: newAudioState,
+    }));
+    
+    setParticipants(prev => prev.map(p => 
+      p.id === participantId ? { ...p, isAudioEnabled: newAudioState } : p
+    ));
+    
+    console.log(`✅ Microphone is now ${newAudioState ? 'ON' : 'OFF'}`);
   };
 
   const toggleVideo = () => {

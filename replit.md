@@ -145,7 +145,34 @@ Key features include:
 └── .env.example              # Environment variable template
 ```
 
+## Media Controls Implementation
+
+### Camera Toggle (toggleVideo)
+- Uses `track.enabled = false/true` for soft mute (preserves device for instant re-enable)
+- Disables/enables tracks on ALL streams: `localStream`, `processedStream`, `backgroundProcessedStream`
+- Updates peer connection senders via `peer._pc.getSenders()` for remote sync
+- Broadcasts "toggle-video" WebSocket message to all participants
+- **Important**: Does NOT use `track.stop()` which would permanently stop the device
+
+### Microphone Toggle (toggleAudio)
+- Uses `track.enabled = false/true` for soft mute (preserves device for instant re-enable)
+- Disables/enables tracks on: `localStream`, `processedStream`
+- Updates peer connection senders via `peer._pc.getSenders()` for remote sync
+- Broadcasts "toggle-audio" WebSocket message to all participants
+- **Important**: Does NOT use `track.stop()` which would permanently stop the device
+
+### Multi-Participant Sync
+- WebSocket broadcasts ensure all participants see media state changes
+- Peer connection senders are updated directly for immediate effect on remote views
+- State sync typically completes within 1-2 seconds
+
 ## Recent Changes
+
+### November 29, 2025
+- **Camera Toggle Fix**: Changed from `track.stop()` to `track.enabled = false` for proper soft mute
+- **Microphone Toggle Fix**: Changed from `track.stop()` to `track.enabled = false` for proper soft mute
+- **Peer Connection Sync**: Added sender track updates via `peer._pc.getSenders()` for both audio and video
+- **Background Stream Support**: Camera toggle now also handles `backgroundProcessedStream` for virtual backgrounds
 
 ### November 4, 2025
 - **Screen Sharing**: Implemented ref-based state tracking to prevent duplicate notifications
