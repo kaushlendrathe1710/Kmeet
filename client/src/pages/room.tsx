@@ -101,10 +101,6 @@ export default function Room() {
   const roomContainerRef = useRef<HTMLDivElement | null>(null);
   const videoElementRef = useRef<HTMLVideoElement | null>(null);
   
-  // Canonical source track refs - these are the ONLY references to hardware
-  const cameraTrackRef = useRef<MediaStreamTrack | null>(null);
-  const micTrackRef = useRef<MediaStreamTrack | null>(null);
-  
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
@@ -341,25 +337,13 @@ export default function Room() {
         },
       });
       
-      // Store canonical track references - ONLY these own the hardware
-      const rawVideoTrack = stream.getVideoTracks()[0] || null;
-      const rawAudioTrack = stream.getAudioTracks()[0] || null;
-      cameraTrackRef.current = rawVideoTrack;
-      micTrackRef.current = rawAudioTrack;
-      console.log(`📹 Initialized camera track: ${rawVideoTrack?.id}`);
-      console.log(`🎤 Initialized mic track: ${rawAudioTrack?.id}`);
+      console.log(`📹 Got camera: ${stream.getVideoTracks()[0]?.id}`);
+      console.log(`🎤 Got mic: ${stream.getAudioTracks()[0]?.id}`);
       
-      // Create localStream with CLONES (not originals)
-      const localStreamTracks: MediaStreamTrack[] = [];
-      if (rawVideoTrack) localStreamTracks.push(rawVideoTrack.clone());
-      if (rawAudioTrack) localStreamTracks.push(rawAudioTrack.clone());
-      const clonedLocalStream = new MediaStream(localStreamTracks);
-      
-      // MediaProcessor also uses clones internally now
       mediaProcessorRef.current = new MediaProcessor();
       const enhanced = mediaProcessorRef.current.initializeAudioProcessing(stream);
       
-      setLocalStream(clonedLocalStream);
+      setLocalStream(stream);
       setProcessedStream(enhanced);
 
       backgroundProcessorRef.current = new BackgroundProcessor();
@@ -765,112 +749,72 @@ export default function Room() {
   };
 
   const toggleAudio = async () => {
-    console.log(`🎤 Toggling microphone: ${isAudioEnabled ? 'OFF' : 'ON'}`);
+    console.log(`🎤 Toggle mic: ${isAudioEnabled ? 'OFF' : 'ON'}`);
     
     if (isAudioEnabled) {
-      // ===== TURN OFF: Release microphone hardware =====
-      // Order matters: cleanup processors first, then stop the canonical track
+      // === TURN OFF ===
+      // Stop ALL audio tracks everywhere
+      localStream?.getAudioTracks().forEach(t => t.stop());
+      processedStream?.getAudioTracks().forEach(t => t.stop());
       
-      // 1. Clean up MediaProcessor (it holds AudioContext reference to stream)
-      if (mediaProcessorRef.current) {
-        mediaProcessorRef.current.cleanup();
-        console.log(`🛑 Cleaned up media processor`);
-      }
-      
-      // 2. Replace peer sender tracks with null FIRST (before stopping)
-      peersRef.current.forEach((peer, peerId) => {
-        if (peer._pc) {
-          peer._pc.getSenders().forEach((sender: RTCRtpSender) => {
+      // Null out peer senders
+      peersRef.current.forEach((peer) => {
+        try {
+          peer._pc?.getSenders().forEach((sender: RTCRtpSender) => {
             if (sender.track?.kind === 'audio') {
-              sender.replaceTrack(null).catch((err: Error) => {
-                console.error(`Failed to null audio for peer ${peerId}:`, err);
-              });
-              console.log(`🛑 Nulled audio sender for peer ${peerId}`);
+              sender.replaceTrack(null);
             }
           });
-        }
+        } catch (e) { /* ignore */ }
       });
       
-      // 3. Create new streams without audio tracks (releases stream references)
-      if (localStream) {
-        const videoTracks = localStream.getVideoTracks();
-        setLocalStream(new MediaStream(videoTracks));
-      }
-      if (processedStream) {
-        const videoTracks = processedStream.getVideoTracks();
-        setProcessedStream(new MediaStream(videoTracks));
-      }
-      
-      // 4. NOW stop the canonical source track (releases hardware)
-      if (micTrackRef.current) {
-        micTrackRef.current.stop();
-        console.log(`🛑 Stopped canonical mic track ${micTrackRef.current.id}`);
-        micTrackRef.current = null;
-      }
-      
       setIsAudioEnabled(false);
-      console.log(`✅ Microphone OFF - hardware should be released`);
       
     } else {
-      // ===== TURN ON: Acquire microphone hardware =====
+      // === TURN ON ===
       try {
         const stream = await navigator.mediaDevices.getUserMedia({
           audio: { echoCancellation: true, noiseSuppression: true, sampleRate: 48000 },
         });
-        
         const newTrack = stream.getAudioTracks()[0];
-        micTrackRef.current = newTrack; // Store canonical reference
-        console.log(`✅ Acquired new mic track ${newTrack.id}`);
         
-        // 1. Update localStream with a CLONE (keep original for hardware control)
+        // Add to localStream
         if (localStream) {
-          const videoTracks = localStream.getVideoTracks();
-          const newStream = new MediaStream([...videoTracks, newTrack.clone()]);
-          setLocalStream(newStream);
-          console.log(`✅ Updated localStream with audio clone`);
+          localStream.addTrack(newTrack);
+        } else {
+          setLocalStream(stream);
         }
         
-        // 2. Recreate MediaProcessor and update processedStream
-        mediaProcessorRef.current = new MediaProcessor();
-        const processedAudio = mediaProcessorRef.current.initializeAudioProcessing(stream);
-        const processedTrack = processedAudio.getAudioTracks()[0];
+        // Add to processedStream
         if (processedStream) {
-          const videoTracks = processedStream.getVideoTracks();
-          const newStream = new MediaStream([...videoTracks, processedTrack]);
-          setProcessedStream(newStream);
-          console.log(`✅ Updated processedStream with new audio`);
+          processedStream.addTrack(newTrack.clone());
         }
         
-        // 3. Send clones to all peers
-        peersRef.current.forEach((peer, peerId) => {
-          if (peer._pc) {
-            peer._pc.getSenders().forEach((sender: RTCRtpSender) => {
+        // Send to peers
+        peersRef.current.forEach((peer) => {
+          try {
+            peer._pc?.getSenders().forEach((sender: RTCRtpSender) => {
               if (sender.track === null || sender.track?.kind === 'audio') {
-                const clone = newTrack.clone();
-                sender.replaceTrack(clone).catch((err: Error) => {
-                  console.error(`Failed to replace audio for peer ${peerId}:`, err);
-                });
-                console.log(`✅ Sent audio clone to peer ${peerId}`);
+                sender.replaceTrack(newTrack.clone());
               }
             });
-          }
+          } catch (e) { /* ignore */ }
         });
         
         setIsAudioEnabled(true);
-        console.log(`✅ Microphone ON - hardware active`);
         
       } catch (err) {
-        console.error("Error acquiring microphone:", err);
+        console.error("Mic error:", err);
         toast({
           title: "Microphone Error",
-          description: "Cannot access microphone. Please check permissions.",
+          description: "Cannot access microphone.",
           variant: "destructive",
         });
         return;
       }
     }
     
-    // Notify other participants
+    // Notify others
     wsRef.current?.send(JSON.stringify({
       type: "toggle-audio",
       roomId,
@@ -884,81 +828,54 @@ export default function Room() {
   };
 
   const toggleVideo = async () => {
-    console.log(`📷 Toggling camera: ${isVideoEnabled ? 'OFF' : 'ON'}`);
+    console.log(`📷 Toggle camera: ${isVideoEnabled ? 'OFF' : 'ON'}`);
     
     if (isVideoEnabled) {
-      // ===== TURN OFF: Release camera hardware =====
-      // Order matters: cleanup processors first, then stop the canonical track
-      
-      // 1. Stop background processor (clears videoElement.srcObject)
+      // === TURN OFF ===
+      // Stop background processor first
       if (backgroundProcessorRef.current) {
         backgroundProcessorRef.current.stopProcessing();
-        console.log(`🛑 Stopped background processor`);
       }
       setBackgroundProcessedStream(null);
       
-      // 2. Replace peer sender tracks with null FIRST (before stopping)
-      peersRef.current.forEach((peer, peerId) => {
-        if (peer._pc) {
-          peer._pc.getSenders().forEach((sender: RTCRtpSender) => {
+      // Stop ALL video tracks everywhere
+      localStream?.getVideoTracks().forEach(t => t.stop());
+      processedStream?.getVideoTracks().forEach(t => t.stop());
+      
+      // Null out peer senders
+      peersRef.current.forEach((peer) => {
+        try {
+          peer._pc?.getSenders().forEach((sender: RTCRtpSender) => {
             if (sender.track?.kind === 'video') {
-              sender.replaceTrack(null).catch((err: Error) => {
-                console.error(`Failed to null video for peer ${peerId}:`, err);
-              });
-              console.log(`🛑 Nulled video sender for peer ${peerId}`);
+              sender.replaceTrack(null);
             }
           });
-        }
+        } catch (e) { /* ignore */ }
       });
       
-      // 3. Create new streams without video tracks (releases stream references)
-      if (localStream) {
-        const audioTracks = localStream.getAudioTracks();
-        setLocalStream(new MediaStream(audioTracks));
-      }
-      if (processedStream) {
-        const audioTracks = processedStream.getAudioTracks();
-        setProcessedStream(new MediaStream(audioTracks));
-      }
-      
-      // 4. NOW stop the canonical source track (releases hardware)
-      if (cameraTrackRef.current) {
-        cameraTrackRef.current.stop();
-        console.log(`🛑 Stopped canonical camera track ${cameraTrackRef.current.id}`);
-        cameraTrackRef.current = null;
-      }
-      
       setIsVideoEnabled(false);
-      console.log(`✅ Camera OFF - hardware should be released`);
       
     } else {
-      // ===== TURN ON: Acquire camera hardware =====
+      // === TURN ON ===
       try {
         const stream = await navigator.mediaDevices.getUserMedia({
           video: { width: 1920, height: 1080 },
         });
-        
         const newTrack = stream.getVideoTracks()[0];
-        cameraTrackRef.current = newTrack; // Store canonical reference
-        console.log(`✅ Acquired new camera track ${newTrack.id}`);
         
-        // 1. Update localStream with a CLONE (keep original for hardware control)
+        // Add to localStream
         if (localStream) {
-          const audioTracks = localStream.getAudioTracks();
-          const newStream = new MediaStream([...audioTracks, newTrack.clone()]);
-          setLocalStream(newStream);
-          console.log(`✅ Updated localStream with video clone`);
+          localStream.addTrack(newTrack);
+        } else {
+          setLocalStream(stream);
         }
         
-        // 2. Update processedStream with cloned video
+        // Add to processedStream
         if (processedStream) {
-          const audioTracks = processedStream.getAudioTracks();
-          const newStream = new MediaStream([...audioTracks, newTrack.clone()]);
-          setProcessedStream(newStream);
-          console.log(`✅ Updated processedStream with new video`);
+          processedStream.addTrack(newTrack.clone());
         }
         
-        // 3. Restart background processor if it was active
+        // Restart background processor if needed
         if (backgroundSettings.mode !== 'none' && backgroundProcessorRef.current) {
           backgroundProcessorRef.current.updateSettings(backgroundSettings);
           const processedBgStream = await backgroundProcessorRef.current.startProcessing(
@@ -966,40 +883,34 @@ export default function Room() {
           );
           if (processedBgStream) {
             setBackgroundProcessedStream(processedBgStream);
-            console.log(`✅ Restarted background processor`);
           }
         }
         
-        // 4. Send clones to all peers
-        peersRef.current.forEach((peer, peerId) => {
-          if (peer._pc) {
-            peer._pc.getSenders().forEach((sender: RTCRtpSender) => {
+        // Send to peers
+        peersRef.current.forEach((peer) => {
+          try {
+            peer._pc?.getSenders().forEach((sender: RTCRtpSender) => {
               if (sender.track === null || sender.track?.kind === 'video') {
-                const clone = newTrack.clone();
-                sender.replaceTrack(clone).catch((err: Error) => {
-                  console.error(`Failed to replace video for peer ${peerId}:`, err);
-                });
-                console.log(`✅ Sent video clone to peer ${peerId}`);
+                sender.replaceTrack(newTrack.clone());
               }
             });
-          }
+          } catch (e) { /* ignore */ }
         });
         
         setIsVideoEnabled(true);
-        console.log(`✅ Camera ON - hardware active`);
         
       } catch (err) {
-        console.error("Error acquiring camera:", err);
+        console.error("Camera error:", err);
         toast({
           title: "Camera Error",
-          description: "Cannot access camera. Please check permissions.",
+          description: "Cannot access camera.",
           variant: "destructive",
         });
         return;
       }
     }
     
-    // Notify other participants
+    // Notify others
     wsRef.current?.send(JSON.stringify({
       type: "toggle-video",
       roomId,
