@@ -100,27 +100,81 @@ export default function Home() {
     }
   };
 
-  const toggleVideo = () => {
+  const toggleVideo = async () => {
     if (!stream) return;
 
-    const videoTrack = stream.getVideoTracks()[0];
-    if (videoTrack) {
-      // Use soft mute (track.enabled) instead of stopping the track
-      videoTrack.enabled = !isVideoEnabled ? true : false;
-      setIsVideoEnabled(!isVideoEnabled);
-      console.log(`Preview video ${!isVideoEnabled ? 'enabled' : 'disabled'}`);
+    if (isVideoEnabled) {
+      // TURN OFF: Stop camera hardware completely (LED goes dark)
+      stream.getVideoTracks().forEach(track => {
+        track.stop();
+        stream.removeTrack(track);
+      });
+      
+      if (videoRef.current) {
+        videoRef.current.srcObject = null;
+      }
+      
+      setIsVideoEnabled(false);
+      console.log("Preview camera OFF (hardware released)");
+    } else {
+      // TURN ON: Request new camera access
+      try {
+        const newStream = await navigator.mediaDevices.getUserMedia({
+          video: selectedVideo ? { deviceId: { exact: selectedVideo } } : true,
+        });
+        
+        const newVideoTrack = newStream.getVideoTracks()[0];
+        stream.addTrack(newVideoTrack);
+        
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+        }
+        
+        setIsVideoEnabled(true);
+        console.log("Preview camera ON (hardware active)");
+      } catch (err) {
+        console.error("Error re-enabling camera:", err);
+        toast({
+          title: "Camera Error",
+          description: "Cannot turn the camera back on. Please check permissions.",
+          variant: "destructive",
+        });
+      }
     }
   };
 
-  const toggleAudio = () => {
+  const toggleAudio = async () => {
     if (!stream) return;
 
-    const audioTrack = stream.getAudioTracks()[0];
-    if (audioTrack) {
-      // Use soft mute (track.enabled) instead of stopping the track
-      audioTrack.enabled = !isAudioEnabled ? true : false;
-      setIsAudioEnabled(!isAudioEnabled);
-      console.log(`Preview audio ${!isAudioEnabled ? 'enabled' : 'disabled'}`);
+    if (isAudioEnabled) {
+      // TURN OFF: Stop microphone hardware completely
+      stream.getAudioTracks().forEach(track => {
+        track.stop();
+        stream.removeTrack(track);
+      });
+      
+      setIsAudioEnabled(false);
+      console.log("Preview microphone OFF (hardware released)");
+    } else {
+      // TURN ON: Request new microphone access
+      try {
+        const newStream = await navigator.mediaDevices.getUserMedia({
+          audio: selectedAudio ? { deviceId: { exact: selectedAudio } } : true,
+        });
+        
+        const newAudioTrack = newStream.getAudioTracks()[0];
+        stream.addTrack(newAudioTrack);
+        
+        setIsAudioEnabled(true);
+        console.log("Preview microphone ON (hardware active)");
+      } catch (err) {
+        console.error("Error re-enabling microphone:", err);
+        toast({
+          title: "Microphone Error",
+          description: "Cannot turn the microphone back on. Please check permissions.",
+          variant: "destructive",
+        });
+      }
     }
   };
 

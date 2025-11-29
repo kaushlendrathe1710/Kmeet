@@ -745,97 +745,171 @@ export default function Room() {
     });
   };
 
-  const toggleAudio = () => {
-    const newAudioState = !isAudioEnabled;
+  const toggleAudio = async () => {
     console.log(`🎤 Toggling microphone: ${isAudioEnabled ? 'OFF' : 'ON'}`);
     
-    // Disable/enable audio tracks on all streams (soft mute - doesn't stop the device)
-    localStream?.getAudioTracks().forEach(track => {
-      track.enabled = newAudioState;
-      console.log(`${newAudioState ? '✅' : '🛑'} localStream audio track ${track.id}: enabled=${newAudioState}`);
-    });
-    
-    processedStream?.getAudioTracks().forEach(track => {
-      track.enabled = newAudioState;
-      console.log(`${newAudioState ? '✅' : '🛑'} processedStream audio track ${track.id}: enabled=${newAudioState}`);
-    });
-    
-    // Update peer connection senders to reflect the audio state
-    peersRef.current.forEach((peer, peerId) => {
-      if (peer._pc) {
-        const senders = peer._pc.getSenders();
-        senders.forEach((sender: RTCRtpSender) => {
-          if (sender.track?.kind === 'audio') {
-            sender.track.enabled = newAudioState;
-            console.log(`${newAudioState ? '✅' : '🛑'} Peer ${peerId} audio sender track: enabled=${newAudioState}`);
+    if (isAudioEnabled) {
+      // TURN OFF: Stop the microphone hardware completely
+      localStream?.getAudioTracks().forEach(track => {
+        track.stop();
+        console.log(`🛑 Stopped localStream audio track ${track.id}`);
+      });
+      
+      processedStream?.getAudioTracks().forEach(track => {
+        track.stop();
+        console.log(`🛑 Stopped processedStream audio track ${track.id}`);
+      });
+      
+      setIsAudioEnabled(false);
+      console.log(`✅ Microphone is now OFF (hardware released)`);
+    } else {
+      // TURN ON: Request new microphone access
+      try {
+        const newStream = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            sampleRate: 48000,
+          },
+        });
+        
+        const newAudioTrack = newStream.getAudioTracks()[0];
+        console.log(`✅ Got new audio track ${newAudioTrack.id}`);
+        
+        // Add new track to localStream
+        if (localStream) {
+          localStream.addTrack(newAudioTrack);
+        }
+        
+        // Process through audio pipeline
+        if (mediaProcessorRef.current && processedStream) {
+          const processedAudio = mediaProcessorRef.current.initializeAudioProcessing(newStream);
+          const processedAudioTrack = processedAudio.getAudioTracks()[0];
+          if (processedAudioTrack) {
+            processedStream.addTrack(processedAudioTrack);
+          }
+        }
+        
+        // Replace track in all peer connections
+        peersRef.current.forEach((peer, peerId) => {
+          if (peer._pc) {
+            const senders = peer._pc.getSenders();
+            senders.forEach((sender: RTCRtpSender) => {
+              if (sender.track?.kind === 'audio' || (!sender.track && sender.track === null)) {
+                sender.replaceTrack(newAudioTrack).catch(err => {
+                  console.error(`Failed to replace audio track for peer ${peerId}:`, err);
+                });
+                console.log(`✅ Replaced audio track for peer ${peerId}`);
+              }
+            });
           }
         });
+        
+        setIsAudioEnabled(true);
+        console.log(`✅ Microphone is now ON (hardware active)`);
+      } catch (err) {
+        console.error("Error re-enabling microphone:", err);
+        toast({
+          title: "Microphone Error",
+          description: "Cannot turn the microphone back on. Please check permissions.",
+          variant: "destructive",
+        });
+        return;
       }
-    });
-
-    setIsAudioEnabled(newAudioState);
+    }
     
     wsRef.current?.send(JSON.stringify({
       type: "toggle-audio",
       roomId,
       participantId,
-      isEnabled: newAudioState,
+      isEnabled: !isAudioEnabled,
     }));
     
     setParticipants(prev => prev.map(p => 
-      p.id === participantId ? { ...p, isAudioEnabled: newAudioState } : p
+      p.id === participantId ? { ...p, isAudioEnabled: !isAudioEnabled } : p
     ));
-    
-    console.log(`✅ Microphone is now ${newAudioState ? 'ON' : 'OFF'}`);
   };
 
-  const toggleVideo = () => {
-    const newVideoState = !isVideoEnabled;
+  const toggleVideo = async () => {
     console.log(`📷 Toggling camera: ${isVideoEnabled ? 'OFF' : 'ON'}`);
     
-    // Disable/enable video tracks on all streams (soft mute - doesn't stop the device)
-    localStream?.getVideoTracks().forEach(track => {
-      track.enabled = newVideoState;
-      console.log(`${newVideoState ? '✅' : '🛑'} localStream video track ${track.id}: enabled=${newVideoState}`);
-    });
-    
-    processedStream?.getVideoTracks().forEach(track => {
-      track.enabled = newVideoState;
-      console.log(`${newVideoState ? '✅' : '🛑'} processedStream video track ${track.id}: enabled=${newVideoState}`);
-    });
-    
-    backgroundProcessedStream?.getVideoTracks().forEach(track => {
-      track.enabled = newVideoState;
-      console.log(`${newVideoState ? '✅' : '🛑'} backgroundProcessedStream video track ${track.id}: enabled=${newVideoState}`);
-    });
-    
-    // Update peer connection senders to reflect the video state
-    peersRef.current.forEach((peer, peerId) => {
-      if (peer._pc) {
-        const senders = peer._pc.getSenders();
-        senders.forEach((sender: RTCRtpSender) => {
-          if (sender.track?.kind === 'video') {
-            sender.track.enabled = newVideoState;
-            console.log(`${newVideoState ? '✅' : '🛑'} Peer ${peerId} sender track: enabled=${newVideoState}`);
+    if (isVideoEnabled) {
+      // TURN OFF: Stop the camera hardware completely
+      localStream?.getVideoTracks().forEach(track => {
+        track.stop();
+        console.log(`🛑 Stopped localStream video track ${track.id}`);
+      });
+      
+      processedStream?.getVideoTracks().forEach(track => {
+        track.stop();
+        console.log(`🛑 Stopped processedStream video track ${track.id}`);
+      });
+      
+      backgroundProcessedStream?.getVideoTracks().forEach(track => {
+        track.stop();
+        console.log(`🛑 Stopped backgroundProcessedStream video track ${track.id}`);
+      });
+      
+      setIsVideoEnabled(false);
+      console.log(`✅ Camera is now OFF (hardware released)`);
+    } else {
+      // TURN ON: Request new camera access
+      try {
+        const newStream = await navigator.mediaDevices.getUserMedia({
+          video: { width: 1920, height: 1080 },
+        });
+        
+        const newVideoTrack = newStream.getVideoTracks()[0];
+        console.log(`✅ Got new video track ${newVideoTrack.id}`);
+        
+        // Add new track to localStream
+        if (localStream) {
+          localStream.addTrack(newVideoTrack);
+        }
+        
+        // Add to processedStream
+        if (processedStream) {
+          processedStream.addTrack(newVideoTrack.clone());
+        }
+        
+        // Replace track in all peer connections
+        peersRef.current.forEach((peer, peerId) => {
+          if (peer._pc) {
+            const senders = peer._pc.getSenders();
+            senders.forEach((sender: RTCRtpSender) => {
+              if (sender.track?.kind === 'video' || (!sender.track && sender.track === null)) {
+                sender.replaceTrack(newVideoTrack).catch(err => {
+                  console.error(`Failed to replace video track for peer ${peerId}:`, err);
+                });
+                console.log(`✅ Replaced video track for peer ${peerId}`);
+              }
+            });
           }
         });
+        
+        setIsVideoEnabled(true);
+        console.log(`✅ Camera is now ON (hardware active)`);
+      } catch (err) {
+        console.error("Error re-enabling camera:", err);
+        toast({
+          title: "Camera Error",
+          description: "Cannot turn the camera back on. Please check permissions.",
+          variant: "destructive",
+        });
+        return;
       }
-    });
-
-    setIsVideoEnabled(newVideoState);
+    }
     
     wsRef.current?.send(JSON.stringify({
       type: "toggle-video",
       roomId,
       participantId,
-      isEnabled: newVideoState,
+      isEnabled: !isVideoEnabled,
     }));
     
     setParticipants(prev => prev.map(p => 
-      p.id === participantId ? { ...p, isVideoEnabled: newVideoState } : p
+      p.id === participantId ? { ...p, isVideoEnabled: !isVideoEnabled } : p
     ));
-    
-    console.log(`✅ Camera is now ${newVideoState ? 'ON' : 'OFF'}`);
   };
 
   const stopScreenShare = (source: 'manual' | 'browser') => {
