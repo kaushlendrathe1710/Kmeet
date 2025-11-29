@@ -68,10 +68,9 @@ export class MediaProcessor {
         .connect(this.limiterNode)
         .connect(this.destinationNode);
 
-      // Use a CLONE of the video track to avoid holding reference to original hardware
       const videoTrack = stream.getVideoTracks()[0];
       if (videoTrack) {
-        this.destinationNode.stream.addTrack(videoTrack.clone());
+        this.destinationNode.stream.addTrack(videoTrack);
       }
 
       return this.destinationNode.stream;

@@ -179,11 +179,6 @@ export class BackgroundProcessor {
       cancelAnimationFrame(this.animationFrameId);
       this.animationFrameId = null;
     }
-    // Clear video element to release track reference
-    if (this.videoElement) {
-      this.videoElement.pause();
-      this.videoElement.srcObject = null;
-    }
   }
 
   cleanup() {

@@ -337,9 +337,6 @@ export default function Room() {
         },
       });
       
-      console.log(`📹 Got camera: ${stream.getVideoTracks()[0]?.id}`);
-      console.log(`🎤 Got mic: ${stream.getAudioTracks()[0]?.id}`);
-      
       mediaProcessorRef.current = new MediaProcessor();
       const enhanced = mediaProcessorRef.current.initializeAudioProcessing(stream);
       
@@ -749,72 +746,78 @@ export default function Room() {
   };
 
   const toggleAudio = async () => {
-    console.log(`🎤 Toggle mic: ${isAudioEnabled ? 'OFF' : 'ON'}`);
+    console.log(`🎤 Toggling microphone: ${isAudioEnabled ? 'OFF' : 'ON'}`);
     
     if (isAudioEnabled) {
-      // === TURN OFF ===
-      // Stop ALL audio tracks everywhere
-      localStream?.getAudioTracks().forEach(t => t.stop());
-      processedStream?.getAudioTracks().forEach(t => t.stop());
+      // TURN OFF: Stop the microphone hardware completely
+      localStream?.getAudioTracks().forEach(track => {
+        track.stop();
+        console.log(`🛑 Stopped localStream audio track ${track.id}`);
+      });
       
-      // Null out peer senders
-      peersRef.current.forEach((peer) => {
-        try {
-          peer._pc?.getSenders().forEach((sender: RTCRtpSender) => {
-            if (sender.track?.kind === 'audio') {
-              sender.replaceTrack(null);
-            }
-          });
-        } catch (e) { /* ignore */ }
+      processedStream?.getAudioTracks().forEach(track => {
+        track.stop();
+        console.log(`🛑 Stopped processedStream audio track ${track.id}`);
       });
       
       setIsAudioEnabled(false);
-      
+      console.log(`✅ Microphone is now OFF (hardware released)`);
     } else {
-      // === TURN ON ===
+      // TURN ON: Request new microphone access
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          audio: { echoCancellation: true, noiseSuppression: true, sampleRate: 48000 },
+        const newStream = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            sampleRate: 48000,
+          },
         });
-        const newTrack = stream.getAudioTracks()[0];
         
-        // Add to localStream
+        const newAudioTrack = newStream.getAudioTracks()[0];
+        console.log(`✅ Got new audio track ${newAudioTrack.id}`);
+        
+        // Add new track to localStream
         if (localStream) {
-          localStream.addTrack(newTrack);
-        } else {
-          setLocalStream(stream);
+          localStream.addTrack(newAudioTrack);
         }
         
-        // Add to processedStream
-        if (processedStream) {
-          processedStream.addTrack(newTrack.clone());
+        // Process through audio pipeline
+        if (mediaProcessorRef.current && processedStream) {
+          const processedAudio = mediaProcessorRef.current.initializeAudioProcessing(newStream);
+          const processedAudioTrack = processedAudio.getAudioTracks()[0];
+          if (processedAudioTrack) {
+            processedStream.addTrack(processedAudioTrack);
+          }
         }
         
-        // Send to peers
-        peersRef.current.forEach((peer) => {
-          try {
-            peer._pc?.getSenders().forEach((sender: RTCRtpSender) => {
-              if (sender.track === null || sender.track?.kind === 'audio') {
-                sender.replaceTrack(newTrack.clone());
+        // Replace track in all peer connections
+        peersRef.current.forEach((peer, peerId) => {
+          if (peer._pc) {
+            const senders = peer._pc.getSenders();
+            senders.forEach((sender: RTCRtpSender) => {
+              if (sender.track?.kind === 'audio' || (!sender.track && sender.track === null)) {
+                sender.replaceTrack(newAudioTrack).catch(err => {
+                  console.error(`Failed to replace audio track for peer ${peerId}:`, err);
+                });
+                console.log(`✅ Replaced audio track for peer ${peerId}`);
               }
             });
-          } catch (e) { /* ignore */ }
+          }
         });
         
         setIsAudioEnabled(true);
-        
+        console.log(`✅ Microphone is now ON (hardware active)`);
       } catch (err) {
-        console.error("Mic error:", err);
+        console.error("Error re-enabling microphone:", err);
         toast({
           title: "Microphone Error",
-          description: "Cannot access microphone.",
+          description: "Cannot turn the microphone back on. Please check permissions.",
           variant: "destructive",
         });
         return;
       }
     }
     
-    // Notify others
     wsRef.current?.send(JSON.stringify({
       type: "toggle-audio",
       roomId,
@@ -828,89 +831,75 @@ export default function Room() {
   };
 
   const toggleVideo = async () => {
-    console.log(`📷 Toggle camera: ${isVideoEnabled ? 'OFF' : 'ON'}`);
+    console.log(`📷 Toggling camera: ${isVideoEnabled ? 'OFF' : 'ON'}`);
     
     if (isVideoEnabled) {
-      // === TURN OFF ===
-      // Stop background processor first
-      if (backgroundProcessorRef.current) {
-        backgroundProcessorRef.current.stopProcessing();
-      }
-      setBackgroundProcessedStream(null);
+      // TURN OFF: Stop the camera hardware completely
+      localStream?.getVideoTracks().forEach(track => {
+        track.stop();
+        console.log(`🛑 Stopped localStream video track ${track.id}`);
+      });
       
-      // Stop ALL video tracks everywhere
-      localStream?.getVideoTracks().forEach(t => t.stop());
-      processedStream?.getVideoTracks().forEach(t => t.stop());
+      processedStream?.getVideoTracks().forEach(track => {
+        track.stop();
+        console.log(`🛑 Stopped processedStream video track ${track.id}`);
+      });
       
-      // Null out peer senders
-      peersRef.current.forEach((peer) => {
-        try {
-          peer._pc?.getSenders().forEach((sender: RTCRtpSender) => {
-            if (sender.track?.kind === 'video') {
-              sender.replaceTrack(null);
-            }
-          });
-        } catch (e) { /* ignore */ }
+      backgroundProcessedStream?.getVideoTracks().forEach(track => {
+        track.stop();
+        console.log(`🛑 Stopped backgroundProcessedStream video track ${track.id}`);
       });
       
       setIsVideoEnabled(false);
-      
+      console.log(`✅ Camera is now OFF (hardware released)`);
     } else {
-      // === TURN ON ===
+      // TURN ON: Request new camera access
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({
+        const newStream = await navigator.mediaDevices.getUserMedia({
           video: { width: 1920, height: 1080 },
         });
-        const newTrack = stream.getVideoTracks()[0];
         
-        // Add to localStream
+        const newVideoTrack = newStream.getVideoTracks()[0];
+        console.log(`✅ Got new video track ${newVideoTrack.id}`);
+        
+        // Add new track to localStream
         if (localStream) {
-          localStream.addTrack(newTrack);
-        } else {
-          setLocalStream(stream);
+          localStream.addTrack(newVideoTrack);
         }
         
         // Add to processedStream
         if (processedStream) {
-          processedStream.addTrack(newTrack.clone());
+          processedStream.addTrack(newVideoTrack.clone());
         }
         
-        // Restart background processor if needed
-        if (backgroundSettings.mode !== 'none' && backgroundProcessorRef.current) {
-          backgroundProcessorRef.current.updateSettings(backgroundSettings);
-          const processedBgStream = await backgroundProcessorRef.current.startProcessing(
-            new MediaStream([newTrack.clone()])
-          );
-          if (processedBgStream) {
-            setBackgroundProcessedStream(processedBgStream);
-          }
-        }
-        
-        // Send to peers
-        peersRef.current.forEach((peer) => {
-          try {
-            peer._pc?.getSenders().forEach((sender: RTCRtpSender) => {
-              if (sender.track === null || sender.track?.kind === 'video') {
-                sender.replaceTrack(newTrack.clone());
+        // Replace track in all peer connections
+        peersRef.current.forEach((peer, peerId) => {
+          if (peer._pc) {
+            const senders = peer._pc.getSenders();
+            senders.forEach((sender: RTCRtpSender) => {
+              if (sender.track?.kind === 'video' || (!sender.track && sender.track === null)) {
+                sender.replaceTrack(newVideoTrack).catch(err => {
+                  console.error(`Failed to replace video track for peer ${peerId}:`, err);
+                });
+                console.log(`✅ Replaced video track for peer ${peerId}`);
               }
             });
-          } catch (e) { /* ignore */ }
+          }
         });
         
         setIsVideoEnabled(true);
-        
+        console.log(`✅ Camera is now ON (hardware active)`);
       } catch (err) {
-        console.error("Camera error:", err);
+        console.error("Error re-enabling camera:", err);
         toast({
           title: "Camera Error",
-          description: "Cannot access camera.",
+          description: "Cannot turn the camera back on. Please check permissions.",
           variant: "destructive",
         });
         return;
       }
     }
     
-    // Notify others
     wsRef.current?.send(JSON.stringify({
       type: "toggle-video",
       roomId,
