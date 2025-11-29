@@ -179,11 +179,17 @@ export class BackgroundProcessor {
       cancelAnimationFrame(this.animationFrameId);
       this.animationFrameId = null;
     }
+    // Clear srcObject to release camera hardware
+    if (this.videoElement.srcObject) {
+      this.videoElement.srcObject = null;
+    }
   }
 
   cleanup() {
     this.stopProcessing();
     this.model = null;
     this.backgroundImageElement = null;
+    // Ensure video element is fully cleared
+    this.videoElement.srcObject = null;
   }
 }

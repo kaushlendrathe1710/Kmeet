@@ -826,7 +826,10 @@ export default function Room() {
     
     if (turningOff) {
       // === TURN OFF ===
-      // 1. Stop peer connection tracks (clones that keep hardware alive)
+      // 1. Stop background processor first (it holds video element reference)
+      backgroundProcessorRef.current?.stopProcessing();
+      
+      // 2. Stop peer connection tracks (clones that keep hardware alive)
       peersRef.current.forEach((peer) => {
         peer._pc?.getSenders().forEach((sender: RTCRtpSender) => {
           if (sender.track?.kind === 'video') {
@@ -836,13 +839,13 @@ export default function Room() {
         });
       });
       
-      // 2. Stop all local video tracks
+      // 3. Stop all local video tracks
       localStream?.getVideoTracks().forEach(t => t.stop());
       processedStream?.getVideoTracks().forEach(t => t.stop());
       backgroundProcessedStream?.getVideoTracks().forEach(t => t.stop());
       setBackgroundProcessedStream(null);
       
-      // 3. Update state
+      // 4. Update state
       setIsVideoEnabled(false);
       setParticipants(prev => prev.map(p => 
         p.id === participantId ? { ...p, isVideoEnabled: false } : p
