@@ -35,10 +35,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
             const { roomId, participantId, participantName } = message;
             
             let room = await storage.getRoom(roomId);
-            const isHost = !room;
+            let isHost = !room;
             
             if (!room) {
               room = await storage.createRoom(roomId, participantId);
+            } else {
+              // Room exists - check if there are any active approved participants
+              const existingParticipants = await storage.getParticipants(roomId);
+              const activeHosts = existingParticipants.filter(p => 
+                p.isHost && p.approvalStatus === 'approved' && clients.has(p.id)
+              );
+              
+              // If no active host exists, promote this participant to host
+              if (activeHosts.length === 0) {
+                isHost = true;
+                // Clean up any stale participants from this room
+                for (const staleP of existingParticipants) {
+                  if (!clients.has(staleP.id)) {
+                    await storage.removeParticipant(roomId, staleP.id);
+                  }
+                }
+                console.log(`No active host in room ${roomId}, promoting ${participantName} to host`);
+              }
             }
 
             // Check if room is locked (non-host cannot join)

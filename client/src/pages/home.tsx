@@ -100,81 +100,27 @@ export default function Home() {
     }
   };
 
-  const toggleVideo = async () => {
+  const toggleVideo = () => {
     if (!stream) return;
 
     const videoTrack = stream.getVideoTracks()[0];
-
-    if (isVideoEnabled) {
-      // TURN OFF VIDEO COMPLETELY
-      if (videoTrack) {
-        videoTrack.stop(); // <- This turns off camera hardware
-        stream.removeTrack(videoTrack);
-      }
-
-      if (videoRef.current) {
-        videoRef.current.srcObject = null;
-      }
-
-      setIsVideoEnabled(false);
-    } else {
-      // TURN VIDEO BACK ON (NEW TRACK)
-      try {
-        const newStream = await navigator.mediaDevices.getUserMedia({
-          video: selectedVideo ? { deviceId: { exact: selectedVideo } } : true,
-        });
-
-        const newVideoTrack = newStream.getVideoTracks()[0];
-        stream.addTrack(newVideoTrack);
-
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-        }
-
-        setIsVideoEnabled(true);
-      } catch (err) {
-        console.error("Error re-enabling video:", err);
-        toast({
-          title: "Camera Error",
-          description: "Cannot turn the camera back on.",
-          variant: "destructive",
-        });
-      }
+    if (videoTrack) {
+      // Use soft mute (track.enabled) instead of stopping the track
+      videoTrack.enabled = !isVideoEnabled ? true : false;
+      setIsVideoEnabled(!isVideoEnabled);
+      console.log(`Preview video ${!isVideoEnabled ? 'enabled' : 'disabled'}`);
     }
   };
 
-  const toggleAudio = async () => {
+  const toggleAudio = () => {
     if (!stream) return;
 
     const audioTrack = stream.getAudioTracks()[0];
-
-    if (isAudioEnabled) {
-      // TURN OFF MIC COMPLETELY
-      if (audioTrack) {
-        audioTrack.stop(); // <- turns off microphone hardware
-        stream.removeTrack(audioTrack);
-      }
-
-      setIsAudioEnabled(false);
-    } else {
-      // TURN MIC BACK ON (NEW TRACK)
-      try {
-        const newStream = await navigator.mediaDevices.getUserMedia({
-          audio: selectedAudio ? { deviceId: { exact: selectedAudio } } : true,
-        });
-
-        const newAudioTrack = newStream.getAudioTracks()[0];
-        stream.addTrack(newAudioTrack);
-
-        setIsAudioEnabled(true);
-      } catch (err) {
-        console.error("Error re-enabling audio:", err);
-        toast({
-          title: "Microphone Error",
-          description: "Cannot turn the microphone back on.",
-          variant: "destructive",
-        });
-      }
+    if (audioTrack) {
+      // Use soft mute (track.enabled) instead of stopping the track
+      audioTrack.enabled = !isAudioEnabled ? true : false;
+      setIsAudioEnabled(!isAudioEnabled);
+      console.log(`Preview audio ${!isAudioEnabled ? 'enabled' : 'disabled'}`);
     }
   };
 
