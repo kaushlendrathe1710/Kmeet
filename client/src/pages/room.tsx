@@ -1207,47 +1207,60 @@ export default function Room() {
     console.log(`📷 Camera: ${turningOff ? 'OFF' : 'ON'}`);
     
     if (turningOff) {
-      // === TURN OFF ===
-      // 1. Stop background processor (clears internal video element srcObject)
+      // === TURN OFF - Release camera hardware completely ===
+      
+      // 1. First, stop ALL video tracks on backgroundProcessedStream BEFORE clearing it
+      if (backgroundProcessedStream) {
+        backgroundProcessedStream.getVideoTracks().forEach(track => {
+          console.log(`🛑 Stopping background video track: ${track.id}`);
+          track.stop();
+        });
+      }
+      
+      // 2. Stop background processor (clears internal video element srcObject)
       backgroundProcessorRef.current?.stopProcessing();
       setBackgroundProcessedStream(null);
       
-      // 2. Stop media processor video tracks
+      // 3. Stop media processor video tracks
       mediaProcessorRef.current?.stopVideoTracks();
       
-      // 3. Stop peer connection tracks (clones that keep hardware alive)
-      peersRef.current.forEach((peer) => {
+      // 4. Stop peer connection tracks (clones that keep hardware alive)
+      peersRef.current.forEach((peer, peerId) => {
         peer._pc?.getSenders().forEach((sender: RTCRtpSender) => {
           if (sender.track?.kind === 'video') {
+            console.log(`🛑 Stopping peer ${peerId} video track: ${sender.track.id}`);
             sender.track.stop();
             sender.replaceTrack(null);
           }
         });
       });
       
-      // 4. Stop AND remove all video tracks from streams
+      // 5. Stop AND remove all video tracks from localStream
       if (localStream) {
         const videoTracks = localStream.getVideoTracks();
         videoTracks.forEach(t => {
+          console.log(`🛑 Stopping local video track: ${t.id}, readyState: ${t.readyState}`);
           t.stop();
           localStream.removeTrack(t);
         });
         // Create new stream with only audio to help garbage collection
-        const audioOnly = new MediaStream(localStream.getAudioTracks());
+        const audioOnly = new MediaStream(localStream.getAudioTracks().filter(t => t.readyState === 'live'));
         setLocalStream(audioOnly);
       }
       
+      // 6. Stop AND remove all video tracks from processedStream
       if (processedStream) {
         const videoTracks = processedStream.getVideoTracks();
         videoTracks.forEach(t => {
+          console.log(`🛑 Stopping processed video track: ${t.id}, readyState: ${t.readyState}`);
           t.stop();
           processedStream.removeTrack(t);
         });
-        const audioOnly = new MediaStream(processedStream.getAudioTracks());
+        const audioOnly = new MediaStream(processedStream.getAudioTracks().filter(t => t.readyState === 'live'));
         setProcessedStream(audioOnly);
       }
       
-      // 5. Update state
+      // 7. Update state
       setIsVideoEnabled(false);
       setParticipants(prev => prev.map(p => 
         p.id === participantId ? { ...p, isVideoEnabled: false } : p
@@ -1257,33 +1270,43 @@ export default function Room() {
         type: "toggle-video", roomId, participantId, isEnabled: false,
       }));
       
-      console.log(`✅ Camera OFF`);
+      console.log(`✅ Camera OFF - All video tracks stopped, hardware should be released`);
     } else {
-      // === TURN ON ===
+      // === TURN ON - Request fresh camera access ===
       try {
+        console.log(`📷 Requesting camera access...`);
         const stream = await navigator.mediaDevices.getUserMedia({
           video: { width: 1920, height: 1080 },
         });
         const newVideoTrack = stream.getVideoTracks()[0];
+        console.log(`📷 Got new video track: ${newVideoTrack.id}`);
         
         // Get ONLY live audio tracks (not stopped ones)
         const liveAudioTracks = (localStream?.getAudioTracks() || [])
           .filter(t => t.readyState === 'live');
         
+        // Also check processedStream for audio tracks
+        const processedAudioTracks = (processedStream?.getAudioTracks() || [])
+          .filter(t => t.readyState === 'live');
+        
+        // Use whichever has live audio tracks
+        const audioTracks = processedAudioTracks.length > 0 ? processedAudioTracks : liveAudioTracks;
+        
         // Create fresh streams with new video + any live audio
         const newLocalStream = new MediaStream([newVideoTrack, ...liveAudioTracks]);
         const newProcessedStream = new MediaStream([
           newVideoTrack.clone(), 
-          ...liveAudioTracks.map(t => t.clone())
+          ...audioTracks.map(t => t.clone())
         ]);
         
         // Add video track to media processor output stream
         mediaProcessorRef.current?.addVideoTrack(newVideoTrack.clone());
         
-        // Update peer connections
-        peersRef.current.forEach((peer) => {
+        // Update all native RTCPeerConnections with new video track
+        peersRef.current.forEach((peer, peerId) => {
           peer._pc?.getSenders().forEach((sender: RTCRtpSender) => {
             if (!sender.track || sender.track.kind === 'video') {
+              console.log(`📷 Replacing video track for peer ${peerId}`);
               sender.replaceTrack(newVideoTrack.clone());
             }
           });
@@ -1301,7 +1324,7 @@ export default function Room() {
           type: "toggle-video", roomId, participantId, isEnabled: true,
         }));
         
-        console.log(`✅ Camera ON`);
+        console.log(`✅ Camera ON - Hardware activated`);
       } catch (err) {
         console.error("Camera error:", err);
         toast({ title: "Camera Error", description: "Cannot access camera.", variant: "destructive" });
