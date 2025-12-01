@@ -17,53 +17,31 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  Video,
-  VideoOff,
-  Mic,
-  MicOff,
-  Settings,
-  Copy,
-  Check,
-} from "lucide-react";
+import { Video, VideoOff, Mic, MicOff, Copy, Check } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 export default function Home() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
+
   const [name, setName] = useState("");
   const [roomCode, setRoomCode] = useState("");
-  const [isVideoEnabled, setIsVideoEnabled] = useState(true);
-  const [isAudioEnabled, setIsAudioEnabled] = useState(true);
+
   const [audioDevices, setAudioDevices] = useState<MediaDeviceInfo[]>([]);
   const [videoDevices, setVideoDevices] = useState<MediaDeviceInfo[]>([]);
   const [selectedAudio, setSelectedAudio] = useState("");
   const [selectedVideo, setSelectedVideo] = useState("");
+
   const [stream, setStream] = useState<MediaStream | null>(null);
+  const [isVideoEnabled, setIsVideoEnabled] = useState(true);
+  const [isAudioEnabled, setIsAudioEnabled] = useState(true);
   const [copied, setCopied] = useState(false);
+
   const videoRef = useRef<HTMLVideoElement>(null);
 
-  useEffect(() => {
-    loadDevices();
-    return () => {
-      if (stream) {
-        stream.getTracks().forEach((track) => track.stop());
-      }
-    };
-  }, []);
-
-  useEffect(() => {
-    if (stream && videoRef.current && isVideoEnabled) {
-      videoRef.current.srcObject = stream;
-    }
-  }, [stream, isVideoEnabled]);
-
-  useEffect(() => {
-    if (selectedAudio || selectedVideo) {
-      startPreview();
-    }
-  }, [selectedAudio, selectedVideo]);
-
+  //
+  // INITIAL DEVICE LOAD
+  //
   const loadDevices = async () => {
     try {
       const devices = await navigator.mediaDevices.enumerateDevices();
@@ -73,124 +51,225 @@ export default function Home() {
       setAudioDevices(audio);
       setVideoDevices(video);
 
-      if (audio.length > 0) setSelectedAudio(audio[0].deviceId);
-      if (video.length > 0) setSelectedVideo(video[0].deviceId);
-    } catch (error) {
-      console.error("Error loading devices:", error);
+      if (!selectedAudio && audio.length > 0)
+        setSelectedAudio(audio[0].deviceId);
+      if (!selectedVideo && video.length > 0)
+        setSelectedVideo(video[0].deviceId);
+    } catch (err) {
+      console.error("Error loading devices:", err);
     }
   };
 
-  const startPreview = async () => {
+  //
+  // START INITIAL PREVIEW
+  //
+  const startInitialPreview = async () => {
     try {
-      stream?.getTracks().forEach((track) => track.stop());
       const mediaStream = await navigator.mediaDevices.getUserMedia({
-        video: selectedVideo ? { deviceId: selectedVideo } : true,
-        audio: selectedAudio ? { deviceId: selectedAudio } : true,
+        video: selectedVideo ? { deviceId: { exact: selectedVideo } } : true,
+        audio: selectedAudio ? { deviceId: { exact: selectedAudio } } : true,
       });
-      setStream(mediaStream);
 
-      loadDevices();
-    } catch (error) {
-      console.error("Error starting preview:", error);
+      setStream(mediaStream);
+      if (videoRef.current) videoRef.current.srcObject = mediaStream;
+    } catch (err) {
+      console.error("Error starting preview:", err);
       toast({
         title: "Camera/Microphone Error",
-        description: "Please allow camera and microphone access to continue.",
+        description: "Please allow camera and microphone access.",
         variant: "destructive",
       });
     }
   };
 
+  //
+  // ON MOUNT
+  //
+  useEffect(() => {
+    loadDevices();
+    return () => stream?.getTracks().forEach((t) => t.stop());
+  }, []);
+
+  //
+  // START PREVIEW AFTER DEVICES LOAD
+  //
+  useEffect(() => {
+    if (selectedAudio && selectedVideo) startInitialPreview();
+  }, [selectedAudio, selectedVideo]);
+
+  //
+  // UPDATE VIDEO ELEMENT IF STREAM CHANGES
+  //
+  useEffect(() => {
+    if (stream && videoRef.current && isVideoEnabled) {
+      videoRef.current.srcObject = stream;
+    }
+  }, [stream, isVideoEnabled]);
+
+  //
+  // SWITCH MICROPHONE ONLY (DO NOT TOUCH CAMERA)
+  //
+  const switchAudioDevice = async (deviceId: string) => {
+    setSelectedAudio(deviceId);
+
+    try {
+      const newAudioStream = await navigator.mediaDevices.getUserMedia({
+        audio: { deviceId: { exact: deviceId } },
+      });
+
+      const newAudioTrack = newAudioStream.getAudioTracks()[0];
+      const videoTracks = stream?.getVideoTracks() ?? [];
+
+      // Stop previous audio
+      stream?.getAudioTracks().forEach((t) => t.stop());
+
+      const combined = new MediaStream([...videoTracks, newAudioTrack]);
+      setStream(combined);
+
+      if (videoRef.current) videoRef.current.srcObject = combined;
+    } catch (err) {
+      console.error("Error switching audio:", err);
+    }
+  };
+
+  //
+  // SWITCH CAMERA ONLY (DO NOT TOUCH MICROPHONE)
+  //
+  const switchVideoDevice = async (deviceId: string) => {
+    setSelectedVideo(deviceId);
+
+    try {
+      const newVideoStream = await navigator.mediaDevices.getUserMedia({
+        video: { deviceId: { exact: deviceId } },
+      });
+
+      const newVideoTrack = newVideoStream.getVideoTracks()[0];
+      const audioTracks = stream?.getAudioTracks() ?? [];
+
+      // Stop previous video
+      stream?.getVideoTracks().forEach((t) => t.stop());
+
+      const combined = new MediaStream([newVideoTrack, ...audioTracks]);
+      setStream(combined);
+
+      if (videoRef.current) videoRef.current.srcObject = combined;
+    } catch (err) {
+      console.error("Error switching video:", err);
+    }
+  };
+
+  //
+  // TOGGLE CAMERA
+  //
   const toggleVideo = async () => {
     if (!stream) return;
 
+    const videoTrack = stream.getVideoTracks()[0];
+
+    // TURN CAMERA OFF (STOP HARDWARE)
     if (isVideoEnabled) {
-      // TURN OFF: Stop camera hardware
-      stream.getVideoTracks().forEach(track => track.stop());
+      if (videoTrack) videoTrack.stop();
+      const audioTracks = stream.getAudioTracks();
+      const newStream = new MediaStream(audioTracks);
+      setStream(newStream);
+
       if (videoRef.current) videoRef.current.srcObject = null;
+
       setIsVideoEnabled(false);
-      console.log("Camera OFF");
-    } else {
-      // TURN ON: Get fresh camera
-      try {
-        const newStream = await navigator.mediaDevices.getUserMedia({
-          video: selectedVideo ? { deviceId: { exact: selectedVideo } } : true,
-        });
-        const newVideoTrack = newStream.getVideoTracks()[0];
-        const combined = new MediaStream([newVideoTrack, ...stream.getAudioTracks()]);
-        setStream(combined);
-        if (videoRef.current) videoRef.current.srcObject = combined;
-        setIsVideoEnabled(true);
-        console.log("Camera ON");
-      } catch (err) {
-        console.error("Camera error:", err);
-        toast({ title: "Camera Error", description: "Cannot access camera.", variant: "destructive" });
-      }
-    }
-  };
-
-  const toggleAudio = async () => {
-    if (!stream) return;
-
-    if (isAudioEnabled) {
-      // TURN OFF: Stop microphone hardware
-      stream.getAudioTracks().forEach(track => track.stop());
-      setIsAudioEnabled(false);
-      console.log("Microphone OFF");
-    } else {
-      // TURN ON: Get fresh microphone
-      try {
-        const newStream = await navigator.mediaDevices.getUserMedia({
-          audio: selectedAudio ? { deviceId: { exact: selectedAudio } } : true,
-        });
-        const newAudioTrack = newStream.getAudioTracks()[0];
-        const combined = new MediaStream([...stream.getVideoTracks(), newAudioTrack]);
-        setStream(combined);
-        if (videoRef.current) videoRef.current.srcObject = combined;
-        setIsAudioEnabled(true);
-        console.log("Microphone ON");
-      } catch (err) {
-        console.error("Microphone error:", err);
-        toast({ title: "Microphone Error", description: "Cannot access microphone.", variant: "destructive" });
-      }
-    }
-  };
-
-  const generateRoomCode = () => {
-    return Math.random().toString(36).substring(2, 10).toUpperCase();
-  };
-
-  const createRoom = () => {
-    if (!name.trim()) {
-      toast({
-        title: "Name Required",
-        description: "Please enter your name to continue.",
-        variant: "destructive",
-      });
       return;
     }
 
-    const newRoomCode = generateRoomCode();
+    // TURN CAMERA ON (GET NEW HARDWARE)
+    try {
+      const newVideoStream = await navigator.mediaDevices.getUserMedia({
+        video: selectedVideo ? { deviceId: { exact: selectedVideo } } : true,
+      });
+
+      const newVideoTrack = newVideoStream.getVideoTracks()[0];
+      const audioTracks = stream.getAudioTracks();
+      const combined = new MediaStream([newVideoTrack, ...audioTracks]);
+
+      setStream(combined);
+      if (videoRef.current) videoRef.current.srcObject = combined;
+
+      setIsVideoEnabled(true);
+    } catch (err) {
+      console.error("Camera error:", err);
+    }
+  };
+
+  //
+  // TOGGLE MICROPHONE
+  //
+  const toggleAudio = async () => {
+    if (!stream) return;
+
+    const audioTrack = stream.getAudioTracks()[0];
+
+    // TURN MIC OFF (STOP HARDWARE)
+    if (isAudioEnabled) {
+      if (audioTrack) audioTrack.stop();
+      const videoTracks = stream.getVideoTracks();
+      const newStream = new MediaStream(videoTracks);
+      setStream(newStream);
+      if (videoRef.current) videoRef.current.srcObject = newStream;
+
+      setIsAudioEnabled(false);
+      return;
+    }
+
+    // TURN MIC ON (GET NEW HARDWARE)
+    try {
+      const newAudioStream = await navigator.mediaDevices.getUserMedia({
+        audio: selectedAudio ? { deviceId: { exact: selectedAudio } } : true,
+      });
+
+      const newAudioTrack = newAudioStream.getAudioTracks()[0];
+      const videoTracks = stream.getVideoTracks();
+      const combined = new MediaStream([...videoTracks, newAudioTrack]);
+
+      setStream(combined);
+      if (videoRef.current) videoRef.current.srcObject = combined;
+
+      setIsAudioEnabled(true);
+    } catch (err) {
+      console.error("Mic error:", err);
+    }
+  };
+
+  //
+  // ROOM UTILITIES
+  //
+  const generateRoomCode = () =>
+    Math.random().toString(36).substring(2, 10).toUpperCase();
+
+  const createRoom = () => {
+    if (!name.trim()) {
+      return toast({
+        title: "Name Required",
+        description: "Please enter your name.",
+        variant: "destructive",
+      });
+    }
+    const code = generateRoomCode();
     localStorage.setItem("participantName", name);
-    setLocation(`/room/${newRoomCode}`);
+    setLocation(`/room/${code}`);
   };
 
   const joinRoom = () => {
     if (!name.trim()) {
-      toast({
+      return toast({
         title: "Name Required",
-        description: "Please enter your name to continue.",
+        description: "Please enter your name.",
         variant: "destructive",
       });
-      return;
     }
-
     if (!roomCode.trim()) {
-      toast({
+      return toast({
         title: "Room Code Required",
-        description: "Please enter a room code to join.",
+        description: "Please enter a room code.",
         variant: "destructive",
       });
-      return;
     }
 
     localStorage.setItem("participantName", name);
@@ -202,23 +281,27 @@ export default function Home() {
     await navigator.clipboard.writeText(code);
     setRoomCode(code);
     setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+
+    setTimeout(() => setCopied(false), 1500);
     toast({
       title: "Room Code Copied",
-      description: "Share this code with participants to join your meeting.",
+      description: "Share this with participants.",
     });
   };
 
+  //
+  // UI
+  //
   return (
     <div className="min-h-screen bg-background flex items-center justify-center p-4">
       <div className="w-full max-w-6xl grid md:grid-cols-2 gap-6">
-        <Card className="md:col-span-1">
+        {/* VIDEO PREVIEW */}
+        <Card>
           <CardHeader>
             <CardTitle className="text-2xl">Video Preview</CardTitle>
-            <CardDescription>
-              Test your camera and microphone before joining
-            </CardDescription>
+            <CardDescription>Test your camera and microphone</CardDescription>
           </CardHeader>
+
           <CardContent className="space-y-4">
             <div className="relative aspect-video bg-muted rounded-lg overflow-hidden">
               {isVideoEnabled ? (
@@ -228,86 +311,57 @@ export default function Home() {
                   muted
                   playsInline
                   className="w-full h-full object-cover"
-                  data-testid="video-preview"
                 />
               ) : (
-                <div
-                  className="w-full h-full flex items-center justify-center bg-muted"
-                  data-testid="video-off-state"
-                >
+                <div className="w-full h-full flex items-center justify-center">
                   <VideoOff className="w-16 h-16 text-muted-foreground" />
                 </div>
               )}
 
               <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-2">
-                <Button
-                  size="icon"
-                  variant={isAudioEnabled ? "default" : "destructive"}
-                  onClick={toggleAudio}
-                  className="rounded-full"
-                  data-testid="button-toggle-audio-preview"
-                >
-                  {isAudioEnabled ? (
-                    <Mic className="w-5 h-5" />
-                  ) : (
-                    <MicOff className="w-5 h-5" />
-                  )}
+                <Button size="icon" onClick={toggleAudio}>
+                  {isAudioEnabled ? <Mic /> : <MicOff />}
                 </Button>
-                <Button
-                  size="icon"
-                  variant={isVideoEnabled ? "default" : "destructive"}
-                  onClick={toggleVideo}
-                  className="rounded-full"
-                  data-testid="button-toggle-video-preview"
-                >
-                  {isVideoEnabled ? (
-                    <Video className="w-5 h-5" />
-                  ) : (
-                    <VideoOff className="w-5 h-5" />
-                  )}
+
+                <Button size="icon" onClick={toggleVideo}>
+                  {isVideoEnabled ? <Video /> : <VideoOff />}
                 </Button>
               </div>
             </div>
 
             <div className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="audio-device">Microphone</Label>
-                <Select value={selectedAudio} onValueChange={setSelectedAudio}>
-                  <SelectTrigger
-                    id="audio-device"
-                    data-testid="select-audio-device"
-                  >
+              <div>
+                <Label>Microphone</Label>
+                <Select value={selectedAudio} onValueChange={switchAudioDevice}>
+                  <SelectTrigger>
                     <SelectValue placeholder="Select microphone" />
                   </SelectTrigger>
                   <SelectContent>
-                    {audioDevices.map((device, index) => (
+                    {audioDevices.map((d, i) => (
                       <SelectItem
-                        key={device.deviceId || `audio-${index}`}
-                        value={device.deviceId || `audio-${index}`}
+                        key={d.deviceId}
+                        value={d.deviceId || "device not found"}
                       >
-                        {device.label || `Microphone ${index + 1}`}
+                        {d.label || `Microphone ${i + 1}`}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="video-device">Camera</Label>
-                <Select value={selectedVideo} onValueChange={setSelectedVideo}>
-                  <SelectTrigger
-                    id="video-device"
-                    data-testid="select-video-device"
-                  >
+              <div>
+                <Label>Camera</Label>
+                <Select value={selectedVideo} onValueChange={switchVideoDevice}>
+                  <SelectTrigger>
                     <SelectValue placeholder="Select camera" />
                   </SelectTrigger>
                   <SelectContent>
-                    {videoDevices.map((device, index) => (
+                    {videoDevices.map((d, i) => (
                       <SelectItem
-                        key={device.deviceId || `video-${index}`}
-                        value={device.deviceId || `video-${index}`}
+                        key={d.deviceId}
+                        value={d.deviceId || "device not found"}
                       >
-                        {device.label || `Camera ${index + 1}`}
+                        {d.label || `Camera ${i + 1}`}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -317,89 +371,64 @@ export default function Home() {
           </CardContent>
         </Card>
 
+        {/* RIGHT SIDE */}
         <div className="space-y-6">
           <Card>
             <CardHeader>
               <CardTitle className="text-4xl font-bold">PodcastMeet</CardTitle>
-              <CardDescription className="text-base">
-                Professional video conferencing for podcast recording
-              </CardDescription>
+              <CardDescription>Professional podcast recording</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="name">Your Name</Label>
-                <Input
-                  id="name"
-                  placeholder="Enter your name"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  data-testid="input-name"
-                />
-              </div>
+
+            <CardContent>
+              <Label>Your Name</Label>
+              <Input
+                placeholder="Enter your name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+              />
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader>
               <CardTitle>Create New Meeting</CardTitle>
-              <CardDescription>
-                Start a new podcast recording session
-              </CardDescription>
             </CardHeader>
+
             <CardContent className="space-y-4">
-              <Button
-                onClick={createRoom}
-                className="w-full"
-                size="lg"
-                data-testid="button-create-room"
-              >
+              <Button onClick={createRoom} className="w-full" size="lg">
                 Create Meeting Room
               </Button>
 
-              <div className="flex gap-2">
-                <Button
-                  onClick={copyRoomCode}
-                  variant="outline"
-                  className="flex-1"
-                  data-testid="button-generate-code"
-                >
-                  {copied ? (
-                    <Check className="w-4 h-4 mr-2" />
-                  ) : (
-                    <Copy className="w-4 h-4 mr-2" />
-                  )}
-                  Generate Room Code
-                </Button>
-              </div>
+              <Button
+                onClick={copyRoomCode}
+                className="w-full"
+                variant="outline"
+              >
+                {copied ? (
+                  <Check className="mr-2" />
+                ) : (
+                  <Copy className="mr-2" />
+                )}
+                Generate Room Code
+              </Button>
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader>
               <CardTitle>Join Meeting</CardTitle>
-              <CardDescription>
-                Enter a room code to join an existing session
-              </CardDescription>
             </CardHeader>
+
             <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="room-code">Room Code</Label>
-                <Input
-                  id="room-code"
-                  placeholder="Enter room code"
-                  value={roomCode}
-                  onChange={(e) => setRoomCode(e.target.value.toUpperCase())}
-                  className="font-mono text-lg"
-                  data-testid="input-room-code"
-                />
-              </div>
-              <Button
-                onClick={joinRoom}
-                className="w-full"
-                variant="secondary"
-                size="lg"
-                data-testid="button-join-room"
-              >
+              <Label>Room Code</Label>
+              <Input
+                value={roomCode}
+                onChange={(e) => setRoomCode(e.target.value.toUpperCase())}
+                placeholder="Enter room code"
+                className="font-mono text-lg"
+              />
+
+              <Button onClick={joinRoom} size="lg" className="w-full">
                 Join Meeting
               </Button>
             </CardContent>
