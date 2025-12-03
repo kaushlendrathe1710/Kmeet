@@ -830,57 +830,18 @@ export default function Room() {
         break;
 
       case "participant-approved":
-        setParticipants(prev => {
-          const updated = prev.map(p =>
-            p.id === message.participantId ? { ...p, approvalStatus: "approved" } : p
-          );
-          
-          // If I was just approved, I need to connect to all OTHER approved participants
-          if (message.participantId === participantId) {
-            console.log(`✅ I was approved! Connecting to existing participants...`);
-            setIsWaitingApproval(false);
-            
-            const otherApproved = updated.filter(p => 
-              p.id !== participantId && p.approvalStatus === "approved"
-            );
-            
-            if (otherApproved.length > 0 && streamReadyRef.current) {
-              const stream = getOutboundStream();
-              if (stream) {
-                console.log(`🔗 Initiating connections to ${otherApproved.length} existing participants`);
-                setTimeout(() => {
-                  otherApproved.forEach(p => {
-                    console.log(`🔗 Connecting to existing participant: ${p.name} (${p.id})`);
-                    createPeerConnectionWithStream(p.id, true, stream);
-                  });
-                }, 500);
-              }
-            }
-          } else {
-            // Another participant was approved, I should connect to them
-            if (streamReadyRef.current) {
-              const stream = getOutboundStream();
-              if (stream) {
-                console.log(`🔗 Initiating connection to newly approved participant: ${message.participantId}`);
-                setTimeout(() => createPeerConnectionWithStream(message.participantId, true, stream), 500);
-              } else {
-                console.log("⏳ No outbound stream, queueing connection for newly approved participant");
-                pendingConnectionsRef.current.push({
-                  id: message.participantId,
-                  name: "Pending",
-                  roomId: roomId,
-                  isAudioEnabled: true,
-                  isVideoEnabled: true,
-                  isScreenSharing: false,
-                  isHost: false,
-                  approvalStatus: "approved",
-                  handRaised: false,
-                  canRecord: false,
-                  joinedAt: Date.now(),
-                });
-              }
+        setParticipants(prev => prev.map(p =>
+          p.id === message.participantId ? { ...p, approvalStatus: "approved" } : p
+        ));
+        // Existing participants should initiate connection to newly approved participant
+        if (message.participantId !== participantId) {
+          if (streamReadyRef.current) {
+            const stream = getOutboundStream();
+            if (stream) {
+              console.log(`🔗 Initiating connection to newly approved participant: ${message.participantId}`);
+              setTimeout(() => createPeerConnectionWithStream(message.participantId, true, stream), 500);
             } else {
-              console.log("⏳ Stream not ready, queueing connection for newly approved participant");
+              console.log("⏳ No outbound stream, queueing connection for newly approved participant");
               pendingConnectionsRef.current.push({
                 id: message.participantId,
                 name: "Pending",
@@ -895,10 +856,23 @@ export default function Room() {
                 joinedAt: Date.now(),
               });
             }
+          } else {
+            console.log("⏳ Stream not ready, queueing connection for newly approved participant");
+            pendingConnectionsRef.current.push({
+              id: message.participantId,
+              name: "Pending",
+              roomId: roomId,
+              isAudioEnabled: true,
+              isVideoEnabled: true,
+              isScreenSharing: false,
+              isHost: false,
+              approvalStatus: "approved",
+              handRaised: false,
+              canRecord: false,
+              joinedAt: Date.now(),
+            });
           }
-          
-          return updated;
-        });
+        }
         break;
 
       case "participant-denied":
