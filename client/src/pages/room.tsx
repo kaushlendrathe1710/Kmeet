@@ -2,11 +2,41 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { useRoute, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Mic, MicOff, Video, VideoOff, Monitor, MonitorOff, MessageSquare, Users, Settings, Phone, Radio, Copy, Check, UserPlus, Hand, Smile, Grid3x3, UserCircle, Lock, LockOpen, ArrowRightLeft, Maximize, Minimize, Wand2, FileUp } from "lucide-react";
+import {
+  Mic,
+  MicOff,
+  Video,
+  VideoOff,
+  Monitor,
+  MonitorOff,
+  MessageSquare,
+  Users,
+  Settings,
+  Phone,
+  Radio,
+  Copy,
+  Check,
+  UserPlus,
+  Hand,
+  Smile,
+  Grid3x3,
+  UserCircle,
+  Lock,
+  LockOpen,
+  ArrowRightLeft,
+  Maximize,
+  Minimize,
+  Wand2,
+  FileUp,
+} from "lucide-react";
 import { VideoGrid, type ViewMode } from "@/components/video-grid";
 import { ChatPanel } from "@/components/chat-panel";
 import { ParticipantsPanel } from "@/components/participants-panel";
-import { SettingsPanel, type AudioSettings, type VideoSettings } from "@/components/settings-panel";
+import {
+  SettingsPanel,
+  type AudioSettings,
+  type VideoSettings,
+} from "@/components/settings-panel";
 import { FileSharing } from "@/components/file-sharing";
 import { RecordingControls } from "@/components/recording-controls";
 import { WaitingRoom } from "@/components/waiting-room";
@@ -18,12 +48,23 @@ import { QualitySelector } from "@/components/quality-selector";
 import { PresetSelector } from "@/components/preset-selector";
 import { useToast } from "@/hooks/use-toast";
 import { MediaProcessor } from "@/lib/media-processor";
-import { BackgroundProcessor, type BackgroundSettings } from "@/lib/background-processor";
+import {
+  BackgroundProcessor,
+  type BackgroundSettings,
+} from "@/lib/background-processor";
 import { BackgroundControls } from "@/components/background-controls";
 import { useNetworkQuality } from "@/hooks/use-network-quality";
-import { useBandwidthAdaptation, VIDEO_QUALITY_CONSTRAINTS, type VideoQualityLevel } from "@/hooks/use-bandwidth-adaptation";
+import {
+  useBandwidthAdaptation,
+  VIDEO_QUALITY_CONSTRAINTS,
+  type VideoQualityLevel,
+} from "@/hooks/use-bandwidth-adaptation";
 import { QUALITY_PRESETS, type QualityPreset } from "@/lib/quality-presets";
-import { useAutoSave, recoverRoomState, clearSavedRoomState } from "@/hooks/use-auto-save";
+import {
+  useAutoSave,
+  recoverRoomState,
+  clearSavedRoomState,
+} from "@/hooks/use-auto-save";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -43,11 +84,15 @@ export default function Room() {
   const [, params] = useRoute("/room/:roomId");
   const [, setLocation] = useLocation();
   const { toast } = useToast();
-  
+
   const roomId = params?.roomId || "";
-  const [participantName] = useState(() => localStorage.getItem("participantName") || "Anonymous");
-  const [participantId] = useState(() => Math.random().toString(36).substring(7));
-  
+  const [participantName] = useState(
+    () => localStorage.getItem("participantName") || "Anonymous"
+  );
+  const [participantId] = useState(() =>
+    Math.random().toString(36).substring(7)
+  );
+
   const [isAudioEnabled, setIsAudioEnabled] = useState(true);
   const [isVideoEnabled, setIsVideoEnabled] = useState(true);
   const [isScreenSharing, setIsScreenSharing] = useState(false);
@@ -61,63 +106,91 @@ export default function Room() {
   const [handRaised, setHandRaised] = useState(false);
   const [isWaitingApproval, setIsWaitingApproval] = useState(false);
   const [isHost, setIsHost] = useState(false);
-  const [reactions, setReactions] = useState<Array<{ id: string; emoji: string }>>([]);
-  const [recordingCountdown, setRecordingCountdown] = useState<number | null>(null);
+  const [reactions, setReactions] = useState<
+    Array<{ id: string; emoji: string }>
+  >([]);
+  const [recordingCountdown, setRecordingCountdown] = useState<number | null>(
+    null
+  );
   const [hideSelfView, setHideSelfView] = useState(false);
   const [viewMode, setViewMode] = useState<"grid" | "speaker">("grid");
-  const [pinnedParticipantId, setPinnedParticipantId] = useState<string | null>(null);
-  const [spotlightedParticipantId, setSpotlightedParticipantId] = useState<string | null>(null);
+  const [pinnedParticipantId, setPinnedParticipantId] = useState<string | null>(
+    null
+  );
+  const [spotlightedParticipantId, setSpotlightedParticipantId] = useState<
+    string | null
+  >(null);
   const [isRoomLocked, setIsRoomLocked] = useState(false);
   const [showTransferHost, setShowTransferHost] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isPiPActive, setIsPiPActive] = useState(false);
   const [gridColumns, setGridColumns] = useState<2 | 3 | 4>(3);
-  const [chapterMarkers, setChapterMarkers] = useState<Array<{ timestamp: number; label: string }>>([]);
-  const [showNotes, setShowNotes] = useState<Array<{ timestamp: number; note: string }>>([]);
+  const [chapterMarkers, setChapterMarkers] = useState<
+    Array<{ timestamp: number; label: string }>
+  >([]);
+  const [showNotes, setShowNotes] = useState<
+    Array<{ timestamp: number; note: string }>
+  >([]);
   const [isReconnecting, setIsReconnecting] = useState(false);
   const [videoQuality, setVideoQuality] = useState<VideoQualityLevel>("auto");
-  const [currentPreset, setCurrentPreset] = useState<QualityPreset>("interview");
+  const [currentPreset, setCurrentPreset] =
+    useState<QualityPreset>("interview");
   const [showBackgroundControls, setShowBackgroundControls] = useState(false);
-  const [backgroundSettings, setBackgroundSettings] = useState<BackgroundSettings>({
-    mode: 'none',
-    blurAmount: 15,
-    backgroundImage: null,
-  });
+  const [backgroundSettings, setBackgroundSettings] =
+    useState<BackgroundSettings>({
+      mode: "none",
+      blurAmount: 15,
+      backgroundImage: null,
+    });
   const [isBackgroundProcessing, setIsBackgroundProcessing] = useState(false);
   const [showFileSharing, setShowFileSharing] = useState(false);
-  const [sharedFiles, setSharedFiles] = useState<Array<{
-    id: string;
-    name: string;
-    size: number;
-    type: string;
-    uploadedBy: string;
-    timestamp: number;
-    data: string;
-  }>>([]);
+  const [sharedFiles, setSharedFiles] = useState<
+    Array<{
+      id: string;
+      name: string;
+      size: number;
+      type: string;
+      uploadedBy: string;
+      timestamp: number;
+      data: string;
+    }>
+  >([]);
   const reconnectAttemptsRef = useRef(0);
   const reconnectTimeoutRef = useRef<number | null>(null);
   const isScreenSharingRef = useRef(false);
-  const recordingControlsRef = useRef<{ toggleRecording: () => void; cancelCountdown: () => void; pauseRecording: () => void; resumeRecording: () => void } | null>(null);
+  const originalVideoTrackRef = useRef<MediaStreamTrack | null>(null);
+  const recordingControlsRef = useRef<{
+    toggleRecording: () => void;
+    cancelCountdown: () => void;
+    pauseRecording: () => void;
+    resumeRecording: () => void;
+  } | null>(null);
   const roomContainerRef = useRef<HTMLDivElement | null>(null);
   const videoElementRef = useRef<HTMLVideoElement | null>(null);
-  
+
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const [screenStream, setScreenStream] = useState<MediaStream | null>(null);
-  const [remoteStreams, setRemoteStreams] = useState<Map<string, MediaStream>>(new Map());
-  
+  const [remoteStreams, setRemoteStreams] = useState<Map<string, MediaStream>>(
+    new Map()
+  );
+
   const wsRef = useRef<WebSocket | null>(null);
   const peersRef = useRef<Map<string, any>>(new Map());
   const pendingConnectionsRef = useRef<Participant[]>([]);
   const streamReadyRef = useRef<boolean>(false);
-  const [primaryPeerConnection, setPrimaryPeerConnection] = useState<RTCPeerConnection | null>(null);
+  const [primaryPeerConnection, setPrimaryPeerConnection] =
+    useState<RTCPeerConnection | null>(null);
   const [duration, setDuration] = useState(0);
   const startTimeRef = useRef<number>(Date.now());
   const mediaProcessorRef = useRef<MediaProcessor | null>(null);
   const backgroundProcessorRef = useRef<BackgroundProcessor | null>(null);
-  const [processedStream, setProcessedStream] = useState<MediaStream | null>(null);
-  const [backgroundProcessedStream, setBackgroundProcessedStream] = useState<MediaStream | null>(null);
+  const [processedStream, setProcessedStream] = useState<MediaStream | null>(
+    null
+  );
+  const [backgroundProcessedStream, setBackgroundProcessedStream] =
+    useState<MediaStream | null>(null);
   const [videoSettings, setVideoSettings] = useState<VideoSettings>({
     brightness: 100,
     contrast: 100,
@@ -127,21 +200,27 @@ export default function Room() {
   });
 
   const networkStats = useNetworkQuality(primaryPeerConnection);
-  const bandwidthStats = useBandwidthAdaptation(primaryPeerConnection, videoQuality === "auto");
+  const bandwidthStats = useBandwidthAdaptation(
+    primaryPeerConnection,
+    videoQuality === "auto"
+  );
 
-  useAutoSave({
-    roomId,
-    participantName,
-    participantId,
-    isAudioEnabled,
-    isVideoEnabled,
-    videoQuality,
-    currentPreset,
-    viewMode,
-    hideSelfView,
-    gridColumns,
-    videoSettings,
-  }, !isWaitingApproval);
+  useAutoSave(
+    {
+      roomId,
+      participantName,
+      participantId,
+      isAudioEnabled,
+      isVideoEnabled,
+      videoQuality,
+      currentPreset,
+      viewMode,
+      hideSelfView,
+      gridColumns,
+      videoSettings,
+    },
+    !isWaitingApproval
+  );
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -159,15 +238,23 @@ export default function Room() {
 
     const recoveredState = recoverRoomState(roomId);
     if (recoveredState) {
-      if (recoveredState.isAudioEnabled !== undefined) setIsAudioEnabled(recoveredState.isAudioEnabled);
-      if (recoveredState.isVideoEnabled !== undefined) setIsVideoEnabled(recoveredState.isVideoEnabled);
-      if (recoveredState.videoQuality) setVideoQuality(recoveredState.videoQuality as VideoQualityLevel);
-      if (recoveredState.currentPreset) setCurrentPreset(recoveredState.currentPreset as QualityPreset);
-      if (recoveredState.viewMode) setViewMode(recoveredState.viewMode as "grid" | "speaker");
-      if (recoveredState.hideSelfView !== undefined) setHideSelfView(recoveredState.hideSelfView);
-      if (recoveredState.gridColumns) setGridColumns(recoveredState.gridColumns as 2 | 3 | 4);
-      if (recoveredState.videoSettings) setVideoSettings(recoveredState.videoSettings);
-      
+      if (recoveredState.isAudioEnabled !== undefined)
+        setIsAudioEnabled(recoveredState.isAudioEnabled);
+      if (recoveredState.isVideoEnabled !== undefined)
+        setIsVideoEnabled(recoveredState.isVideoEnabled);
+      if (recoveredState.videoQuality)
+        setVideoQuality(recoveredState.videoQuality as VideoQualityLevel);
+      if (recoveredState.currentPreset)
+        setCurrentPreset(recoveredState.currentPreset as QualityPreset);
+      if (recoveredState.viewMode)
+        setViewMode(recoveredState.viewMode as "grid" | "speaker");
+      if (recoveredState.hideSelfView !== undefined)
+        setHideSelfView(recoveredState.hideSelfView);
+      if (recoveredState.gridColumns)
+        setGridColumns(recoveredState.gridColumns as 2 | 3 | 4);
+      if (recoveredState.videoSettings)
+        setVideoSettings(recoveredState.videoSettings);
+
       toast({
         title: "Session Recovered",
         description: "Your previous settings have been restored",
@@ -189,16 +276,18 @@ export default function Room() {
     }
 
     const applyBackgroundProcessing = async () => {
-      if (backgroundSettings.mode === 'none') {
+      if (backgroundSettings.mode === "none") {
         setBackgroundProcessedStream(null);
         backgroundProcessorRef.current?.stopProcessing();
         return;
       }
 
       if (!backgroundProcessorRef.current) return;
-      
+
       backgroundProcessorRef.current.updateSettings(backgroundSettings);
-      const bgStream = await backgroundProcessorRef.current.startProcessing(processedStream);
+      const bgStream = await backgroundProcessorRef.current.startProcessing(
+        processedStream
+      );
       if (bgStream) {
         setBackgroundProcessedStream(bgStream);
       }
@@ -213,14 +302,17 @@ export default function Room() {
 
   useEffect(() => {
     const handleKeyPress = (e: KeyboardEvent) => {
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
+      if (
+        e.target instanceof HTMLInputElement ||
+        e.target instanceof HTMLTextAreaElement
+      ) {
         return;
       }
 
       const key = e.key.toLowerCase();
-      
+
       // Push-to-talk on spacebar press
-      if (key === ' ' && !pushToTalkActiveRef.current) {
+      if (key === " " && !pushToTalkActiveRef.current) {
         e.preventDefault();
         pushToTalkActiveRef.current = true;
         wasAudioEnabledRef.current = isAudioEnabled;
@@ -229,67 +321,70 @@ export default function Room() {
         }
         return;
       }
-      
-      if (key === 'escape' && recordingCountdown !== null) {
+
+      if (key === "escape" && recordingCountdown !== null) {
         recordingControlsRef.current?.cancelCountdown();
         return;
       }
-      
+
       switch (key) {
-        case 'm':
+        case "m":
           toggleAudio();
           break;
-        case 'v':
+        case "v":
           toggleVideo();
           break;
-        case 's':
+        case "s":
           toggleScreenShare();
           break;
-        case 'r':
+        case "r":
           recordingControlsRef.current?.toggleRecording();
           break;
-        case 'c':
-          setShowChat(prev => !prev);
+        case "c":
+          setShowChat((prev) => !prev);
           break;
-        case 'p':
+        case "p":
           if (isRecording) {
             // When recording, P pauses (no-op if already paused)
             recordingControlsRef.current?.pauseRecording();
           } else {
             // When not recording, P toggles participants panel
-            setShowParticipants(prev => !prev);
+            setShowParticipants((prev) => !prev);
           }
           break;
-        case 'u':
+        case "u":
           // U resumes recording when paused
           if (isRecording) {
             recordingControlsRef.current?.resumeRecording();
           }
           break;
-        case 'h':
+        case "h":
           toggleHandRaise();
           break;
-        case 'f':
+        case "f":
           toggleFullscreen();
           break;
-        case 'i':
+        case "i":
           togglePictureInPicture();
           break;
-        case 'k':
+        case "k":
           addChapterMarker();
           break;
       }
     };
 
     const handleKeyUp = (e: KeyboardEvent) => {
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
+      if (
+        e.target instanceof HTMLInputElement ||
+        e.target instanceof HTMLTextAreaElement
+      ) {
         return;
       }
 
       const key = e.key.toLowerCase();
-      
+
       // Push-to-talk release
-      if (key === ' ' && pushToTalkActiveRef.current) {
+      if (key === " " && pushToTalkActiveRef.current) {
         e.preventDefault();
         pushToTalkActiveRef.current = false;
         if (!wasAudioEnabledRef.current && isAudioEnabled) {
@@ -298,21 +393,28 @@ export default function Room() {
       }
     };
 
-    window.addEventListener('keydown', handleKeyPress);
-    window.addEventListener('keyup', handleKeyUp);
+    window.addEventListener("keydown", handleKeyPress);
+    window.addEventListener("keyup", handleKeyUp);
     return () => {
-      window.removeEventListener('keydown', handleKeyPress);
-      window.removeEventListener('keyup', handleKeyUp);
+      window.removeEventListener("keydown", handleKeyPress);
+      window.removeEventListener("keyup", handleKeyUp);
     };
-  }, [isRecording, isAudioEnabled, isVideoEnabled, isScreenSharing, recordingCountdown]);
+  }, [
+    isRecording,
+    isAudioEnabled,
+    isVideoEnabled,
+    isScreenSharing,
+    recordingCountdown,
+  ]);
 
   useEffect(() => {
     const handleFullscreenChange = () => {
       setIsFullscreen(!!document.fullscreenElement);
     };
 
-    document.addEventListener('fullscreenchange', handleFullscreenChange);
-    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
+    document.addEventListener("fullscreenchange", handleFullscreenChange);
+    return () =>
+      document.removeEventListener("fullscreenchange", handleFullscreenChange);
   }, []);
 
   useEffect(() => {
@@ -320,79 +422,77 @@ export default function Room() {
       setIsPiPActive(!!document.pictureInPictureElement);
     };
 
-    document.addEventListener('enterpictureinpicture', handlePiPChange, true);
-    document.addEventListener('leavepictureinpicture', handlePiPChange, true);
+    document.addEventListener("enterpictureinpicture", handlePiPChange, true);
+    document.addEventListener("leavepictureinpicture", handlePiPChange, true);
     return () => {
-      document.removeEventListener('enterpictureinpicture', handlePiPChange, true);
-      document.removeEventListener('leavepictureinpicture', handlePiPChange, true);
+      document.removeEventListener(
+        "enterpictureinpicture",
+        handlePiPChange,
+        true
+      );
+      document.removeEventListener(
+        "leavepictureinpicture",
+        handlePiPChange,
+        true
+      );
     };
   }, []);
 
   const initializeMedia = async () => {
+    console.log("🎬 [INIT] Starting media initialization...");
     try {
+      console.log("🎬 [INIT] Requesting getUserMedia...");
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { width: 1920, height: 1080 },
+        video: { width: { ideal: 1920 }, height: { ideal: 1080 } },
         audio: {
           echoCancellation: true,
           noiseSuppression: true,
           sampleRate: 48000,
         },
       });
-      
-      mediaProcessorRef.current = new MediaProcessor();
-      const enhanced = mediaProcessorRef.current.initializeAudioProcessing(stream);
-      
+
+      const videoTracks = stream.getVideoTracks();
+      const audioTracks = stream.getAudioTracks();
+      console.log(`✅ [INIT] Got local stream:`);
+      console.log(
+        `  - Video tracks: ${videoTracks.length}`,
+        videoTracks.map((t) => `${t.label} (${t.id.substr(0, 8)}...)`)
+      );
+      console.log(
+        `  - Audio tracks: ${audioTracks.length}`,
+        audioTracks.map((t) => `${t.label} (${t.id.substr(0, 8)}...)`)
+      );
+      console.log(`  - Stream ID: ${stream.id}`);
+
       setLocalStream(stream);
-      setProcessedStream(enhanced);
       streamReadyRef.current = true;
-      console.log("✅ Local stream ready, processing pending connections...");
-      
+      console.log(
+        "✅ [INIT] localStream state updated, streamReadyRef set to true"
+      );
+
       // Process any pending connections that were queued before stream was ready
       if (pendingConnectionsRef.current.length > 0) {
-        console.log(`📋 Processing ${pendingConnectionsRef.current.length} pending connections`);
+        console.log(
+          `📋 Processing ${pendingConnectionsRef.current.length} pending connections`
+        );
         const pendingParticipants = [...pendingConnectionsRef.current];
         pendingConnectionsRef.current = [];
+
         // Small delay to ensure state is updated
         setTimeout(() => {
-          // Create composite stream with video from original + audio from enhanced
-          const compositeStream = new MediaStream();
-          stream.getVideoTracks().forEach(track => {
-            if (track.readyState === 'live') compositeStream.addTrack(track);
-          });
-          (enhanced || stream).getAudioTracks().forEach(track => {
-            if (track.readyState === 'live') compositeStream.addTrack(track);
-          });
-          console.log(`📡 Composite stream for pending: ${compositeStream.getVideoTracks().length} video, ${compositeStream.getAudioTracks().length} audio`);
-          
-          pendingParticipants.forEach(participant => {
-            if (participant.id !== participantId && participant.approvalStatus === "approved") {
-              createPeerConnectionWithStream(participant.id, true, compositeStream);
+          pendingParticipants.forEach((participant) => {
+            if (
+              participant.id !== participantId &&
+              participant.approvalStatus === "approved"
+            ) {
+              createPeerConnection(participant.id, true);
             }
           });
         }, 100);
       }
 
-      backgroundProcessorRef.current = new BackgroundProcessor();
-      const initialized = await backgroundProcessorRef.current.initialize();
-      if (initialized) {
-        setIsBackgroundProcessing(true);
-      }
-      
-      const localParticipant: Participant = {
-        id: participantId,
-        name: participantName,
-        roomId,
-        isAudioEnabled: true,
-        isVideoEnabled: true,
-        isScreenSharing: false,
-        isHost: false,
-        approvalStatus: "pending",
-        handRaised: false,
-        canRecord: false,
-        joinedAt: Date.now(),
-      };
-      
-      setParticipants([localParticipant]);
+      // Don't set participants here - let the server send the participants-list
+      // with proper approval status after join-room is processed
     } catch (error) {
       console.error("Error accessing media devices:", error);
       toast({
@@ -407,7 +507,9 @@ export default function Room() {
     if (mediaProcessorRef.current) {
       mediaProcessorRef.current.setGain(settings.gainControl / 100);
       if (settings.noiseSuppressionEnabled) {
-        mediaProcessorRef.current.setNoiseSuppressionIntensity(settings.noiseSuppression);
+        mediaProcessorRef.current.setNoiseSuppressionIntensity(
+          settings.noiseSuppression
+        );
       }
     }
   };
@@ -422,315 +524,399 @@ export default function Room() {
     { urls: "stun:stun1.l.google.com:19302" },
   ];
 
-  // Helper function to get outbound stream with both audio (from processedStream) and video (from localStream/backgroundProcessedStream)
-  const getOutboundStream = (): MediaStream | null => {
-    // Get video tracks from background processed stream or local stream
-    const videoSource = backgroundProcessedStream || localStream;
-    const videoTracks = videoSource?.getVideoTracks() || [];
-    
-    // Get audio tracks from processed stream (enhanced audio) or local stream
-    const audioSource = processedStream || localStream;
-    const audioTracks = audioSource?.getAudioTracks() || [];
-    
-    if (videoTracks.length === 0 && audioTracks.length === 0) {
-      return null;
-    }
-    
-    // Create a composite stream with both audio and video
-    const compositeStream = new MediaStream();
-    videoTracks.forEach(track => {
-      if (track.readyState === 'live') {
-        compositeStream.addTrack(track);
+  // Create a WebRTC peer connection with another participant
+  const createPeerConnection = useCallback(
+    (remoteParticipantId: string, initiator: boolean) => {
+      console.log(`\n🔗 [PEER] ============================================`);
+      console.log(`🔗 [PEER] Creating connection to: ${remoteParticipantId}`);
+      console.log(
+        `🔗 [PEER] Role: ${
+          initiator
+            ? "INITIATOR (will send offer)"
+            : "RECEIVER (will send answer)"
+        }`
+      );
+
+      // Don't create duplicate connections
+      if (peersRef.current.has(remoteParticipantId)) {
+        console.warn(
+          `⚠️ [PEER] Already have connection to ${remoteParticipantId}, reusing`
+        );
+        return peersRef.current.get(remoteParticipantId);
       }
-    });
-    audioTracks.forEach(track => {
-      if (track.readyState === 'live') {
-        compositeStream.addTrack(track);
+
+      if (!localStream) {
+        console.error(
+          "❌ [PEER] CRITICAL: No local stream available! Cannot create peer connection."
+        );
+        console.error(
+          "❌ [PEER] streamReadyRef.current:",
+          streamReadyRef.current
+        );
+        return null;
       }
-    });
-    
-    console.log(`📡 Outbound stream: ${compositeStream.getVideoTracks().length} video, ${compositeStream.getAudioTracks().length} audio tracks`);
-    return compositeStream;
-  };
 
-  // Helper function to create peer connection with a specific stream (used when stream is passed directly)
-  const createPeerConnectionWithStream = (
-    remoteParticipantId: string,
-    initiator: boolean,
-    stream: MediaStream
-  ) => {
-    console.log(`🔗 Creating peer connection to ${remoteParticipantId}, initiator: ${initiator}, stream tracks: ${stream.getTracks().length}`);
-    
-    // Don't create duplicate connections
-    if (peersRef.current.has(remoteParticipantId)) {
-      console.log(`Already have connection to ${remoteParticipantId}`);
-      return peersRef.current.get(remoteParticipantId);
-    }
+      console.log(
+        `🔗 [PEER] Creating RTCPeerConnection with ICE servers:`,
+        iceServers
+      );
+      const pc = new RTCPeerConnection({ iceServers });
 
-    const pc = new RTCPeerConnection({ iceServers });
+      // Add ALL tracks from local stream
+      const tracks = localStream.getTracks();
+      console.log(
+        `📤 [PEER] Adding ${
+          tracks.length
+        } tracks from localStream (${localStream.id.substr(0, 8)}...) to peer:`
+      );
+      tracks.forEach((track) => {
+        console.log(
+          `  ➕ [PEER] Adding ${track.kind} track: ${
+            track.label
+          } (${track.id.substr(0, 8)}...) enabled=${track.enabled} readyState=${
+            track.readyState
+          }`
+        );
+        pc.addTrack(track, localStream);
+      });
+      console.log(`✅ [PEER] All tracks added to RTCPeerConnection`);
 
-    // Add local tracks to the connection
-    stream.getTracks().forEach(track => {
-      console.log(`Adding track to peer connection: ${track.kind}`);
-      pc.addTrack(track, stream);
-    });
+      // Handle incoming tracks
+      pc.ontrack = (event) => {
+        console.log(
+          `\n📥 [TRACK] ============================================`
+        );
+        console.log(`📥 [TRACK] Received track from ${remoteParticipantId}:`);
+        console.log(`  - Kind: ${event.track.kind}`);
+        console.log(`  - ID: ${event.track.id.substr(0, 8)}...`);
+        console.log(`  - Label: ${event.track.label}`);
+        console.log(`  - ReadyState: ${event.track.readyState}`);
+        console.log(`  - Enabled: ${event.track.enabled}`);
+        console.log(`  - Streams: ${event.streams.length}`);
 
-    // Handle ICE candidates
-    pc.onicecandidate = (event) => {
-      if (event.candidate) {
-        console.log(`📤 Sending ICE candidate to ${remoteParticipantId}`);
-        wsRef.current?.send(JSON.stringify({
-          type: "signal",
-          roomId,
-          participantId,
-          targetId: remoteParticipantId,
-          signal: { type: "candidate", candidate: event.candidate },
-        }));
+        const remoteStream = event.streams[0];
+        if (remoteStream) {
+          console.log(
+            `📥 [TRACK] Remote stream ID: ${remoteStream.id.substr(0, 8)}...`
+          );
+          console.log(
+            `📥 [TRACK] Remote stream tracks: ${
+              remoteStream.getTracks().length
+            }`
+          );
+          remoteStream.getTracks().forEach((t) => {
+            console.log(
+              `  - ${t.kind}: ${t.id.substr(0, 8)}... (${t.readyState})`
+            );
+          });
+
+          setRemoteStreams((prev) => {
+            const newMap = new Map(prev);
+            newMap.set(remoteParticipantId, remoteStream);
+            console.log(
+              `✅ [TRACK] Stored remote stream for ${remoteParticipantId}. Total remote streams: ${newMap.size}`
+            );
+            return newMap;
+          });
+        } else {
+          console.error(
+            `❌ [TRACK] No stream in track event from ${remoteParticipantId}!`
+          );
+        }
+      };
+
+      // Handle ICE candidates
+      pc.onicecandidate = (event) => {
+        if (event.candidate) {
+          console.log(
+            `🧊 [ICE] New candidate for ${remoteParticipantId}:`,
+            event.candidate.candidate.substr(0, 50) + "..."
+          );
+          wsRef.current?.send(
+            JSON.stringify({
+              type: "signal",
+              roomId,
+              participantId,
+              targetId: remoteParticipantId,
+              signal: { type: "candidate", candidate: event.candidate },
+            })
+          );
+        } else {
+          console.log(
+            `🧊 [ICE] ICE gathering complete for ${remoteParticipantId}`
+          );
+        }
+      };
+
+      // ICE connection state
+      pc.oniceconnectionstatechange = () => {
+        console.log(
+          `🧊 [ICE] Connection state with ${remoteParticipantId}: ${pc.iceConnectionState}`
+        );
+      };
+
+      // ICE gathering state
+      pc.onicegatheringstatechange = () => {
+        console.log(
+          `🧊 [ICE] Gathering state with ${remoteParticipantId}: ${pc.iceGatheringState}`
+        );
+      };
+
+      // Connection state monitoring
+      pc.onconnectionstatechange = () => {
+        console.log(
+          `\n🔌 [CONNECTION] ============================================`
+        );
+        console.log(
+          `🔌 [CONNECTION] State with ${remoteParticipantId}: ${pc.connectionState}`
+        );
+        console.log(`🔌 [CONNECTION] Signaling state: ${pc.signalingState}`);
+        console.log(
+          `🔌 [CONNECTION] ICE connection state: ${pc.iceConnectionState}`
+        );
+        console.log(
+          `🔌 [CONNECTION] ICE gathering state: ${pc.iceGatheringState}`
+        );
+
+        if (pc.connectionState === "connected") {
+          console.log(
+            `✅ [CONNECTION] Successfully connected to ${remoteParticipantId}!`
+          );
+          if (!primaryPeerConnection) {
+            console.log(`✅ [CONNECTION] Setting as primary peer connection`);
+            setPrimaryPeerConnection(pc);
+          }
+
+          // Log senders
+          const senders = pc.getSenders();
+          console.log(`📤 [CONNECTION] Active senders (${senders.length}):`);
+          senders.forEach((sender) => {
+            if (sender.track) {
+              console.log(
+                `  - ${sender.track.kind}: ${sender.track.id.substr(
+                  0,
+                  8
+                )}... (enabled=${sender.track.enabled})`
+              );
+            } else {
+              console.log(`  - (no track)`);
+            }
+          });
+        }
+
+        if (
+          pc.connectionState === "failed" ||
+          pc.connectionState === "closed"
+        ) {
+          console.error(
+            `❌ [CONNECTION] Connection ${pc.connectionState} with ${remoteParticipantId}`
+          );
+          peersRef.current.delete(remoteParticipantId);
+          setRemoteStreams((prev) => {
+            const newMap = new Map(prev);
+            newMap.delete(remoteParticipantId);
+            console.log(
+              `🗑️ [CONNECTION] Removed remote stream. Remaining: ${newMap.size}`
+            );
+            return newMap;
+          });
+        }
+      };
+
+      // Store peer
+      const peerData = { _pc: pc, remoteId: remoteParticipantId };
+      peersRef.current.set(remoteParticipantId, peerData);
+
+      // If initiator, create and send offer
+      if (initiator) {
+        console.log(`📝 [OFFER] Creating offer for ${remoteParticipantId}...`);
+        pc.createOffer()
+          .then((offer) => {
+            console.log(
+              `📝 [OFFER] Offer created, setting local description...`
+            );
+            return pc.setLocalDescription(offer);
+          })
+          .then(() => {
+            console.log(
+              `📤 [OFFER] Sending offer to ${remoteParticipantId} via WebSocket`
+            );
+            console.log(`📤 [OFFER] SDP type: ${pc.localDescription?.type}`);
+            wsRef.current?.send(
+              JSON.stringify({
+                type: "signal",
+                roomId,
+                participantId,
+                targetId: remoteParticipantId,
+                signal: { type: "offer", sdp: pc.localDescription },
+              })
+            );
+          })
+          .catch((err) =>
+            console.error("❌ [OFFER] Error creating offer:", err)
+          );
+      } else {
+        console.log(
+          `⏳ [PEER] Waiting for offer from ${remoteParticipantId}...`
+        );
       }
-    };
 
-    // Handle incoming remote tracks
-    pc.ontrack = (event) => {
-      console.log(`📥 Received track from ${remoteParticipantId}:`, event.track.kind, event.streams.length);
-      const remoteStream = event.streams[0];
-      if (remoteStream) {
-        console.log(`📥 Setting remote stream for ${remoteParticipantId}, tracks: ${remoteStream.getTracks().length}`);
-        setRemoteStreams(prev => {
-          const newMap = new Map(prev);
-          newMap.set(remoteParticipantId, remoteStream);
-          return newMap;
-        });
-      }
-    };
-
-    pc.onconnectionstatechange = () => {
-      console.log(`Connection state with ${remoteParticipantId}: ${pc.connectionState}`);
-      if (pc.connectionState === "connected") {
-        console.log(`✅ Successfully connected to ${remoteParticipantId}`);
-      }
-      if (pc.connectionState === "disconnected" || pc.connectionState === "failed" || pc.connectionState === "closed") {
-        peersRef.current.delete(remoteParticipantId);
-        setRemoteStreams(prev => {
-          const newMap = new Map(prev);
-          newMap.delete(remoteParticipantId);
-          return newMap;
-        });
-      }
-    };
-
-    pc.oniceconnectionstatechange = () => {
-      console.log(`ICE connection state with ${remoteParticipantId}: ${pc.iceConnectionState}`);
-    };
-
-    // Store the peer connection with metadata
-    const peerData = { _pc: pc, remoteId: remoteParticipantId };
-    peersRef.current.set(remoteParticipantId, peerData);
-
-    // If we're the initiator, create and send an offer
-    if (initiator) {
-      pc.createOffer()
-        .then(offer => pc.setLocalDescription(offer))
-        .then(() => {
-          console.log(`📤 Sending offer to ${remoteParticipantId}`);
-          wsRef.current?.send(JSON.stringify({
-            type: "signal",
-            roomId,
-            participantId,
-            targetId: remoteParticipantId,
-            signal: { type: "offer", sdp: pc.localDescription },
-          }));
-        })
-        .catch(err => console.error("Error creating offer:", err));
-    }
-
-    return peerData;
-  };
-
-  // Create a WebRTC peer connection with another participant using native RTCPeerConnection
-  const createPeerConnection = useCallback((
-    remoteParticipantId: string,
-    initiator: boolean,
-    stream: MediaStream
-  ) => {
-    console.log(`🔗 Creating peer connection to ${remoteParticipantId}, initiator: ${initiator}`);
-    
-    // Don't create duplicate connections
-    if (peersRef.current.has(remoteParticipantId)) {
-      console.log(`Already have connection to ${remoteParticipantId}`);
-      return peersRef.current.get(remoteParticipantId);
-    }
-
-    const pc = new RTCPeerConnection({ iceServers });
-
-    // Add local tracks to the connection
-    stream.getTracks().forEach(track => {
-      pc.addTrack(track, stream);
-    });
-
-    // Handle ICE candidates
-    pc.onicecandidate = (event) => {
-      if (event.candidate) {
-        console.log(`📤 Sending ICE candidate to ${remoteParticipantId}`);
-        wsRef.current?.send(JSON.stringify({
-          type: "signal",
-          roomId,
-          participantId,
-          targetId: remoteParticipantId,
-          signal: { type: "candidate", candidate: event.candidate },
-        }));
-      }
-    };
-
-    // Handle incoming remote tracks
-    pc.ontrack = (event) => {
-      console.log(`📥 Received track from ${remoteParticipantId}:`, event.track.kind);
-      const remoteStream = event.streams[0];
-      if (remoteStream) {
-        setRemoteStreams(prev => {
-          const newMap = new Map(prev);
-          newMap.set(remoteParticipantId, remoteStream);
-          return newMap;
-        });
-      }
-    };
-
-    pc.onconnectionstatechange = () => {
-      console.log(`Connection state with ${remoteParticipantId}: ${pc.connectionState}`);
-      if (pc.connectionState === "disconnected" || pc.connectionState === "failed" || pc.connectionState === "closed") {
-        peersRef.current.delete(remoteParticipantId);
-        setRemoteStreams(prev => {
-          const newMap = new Map(prev);
-          newMap.delete(remoteParticipantId);
-          return newMap;
-        });
-      }
-    };
-
-    // Store the peer connection with metadata
-    const peerData = { _pc: pc, remoteId: remoteParticipantId };
-    peersRef.current.set(remoteParticipantId, peerData);
-
-    // If we're the initiator, create and send an offer
-    if (initiator) {
-      pc.createOffer()
-        .then(offer => pc.setLocalDescription(offer))
-        .then(() => {
-          console.log(`📤 Sending offer to ${remoteParticipantId}`);
-          wsRef.current?.send(JSON.stringify({
-            type: "signal",
-            roomId,
-            participantId,
-            targetId: remoteParticipantId,
-            signal: { type: "offer", sdp: pc.localDescription },
-          }));
-        })
-        .catch(err => console.error("Error creating offer:", err));
-    }
-
-    return peerData;
-  }, [roomId, participantId]);
+      return peerData;
+    },
+    [roomId, participantId, localStream, primaryPeerConnection]
+  );
 
   // Handle incoming signaling data (offers, answers, ICE candidates)
-  const handleSignal = useCallback((fromParticipantId: string, signal: { type: string; sdp?: RTCSessionDescription; candidate?: RTCIceCandidate }) => {
-    console.log(`📥 Received signal from ${fromParticipantId}:`, signal.type);
-    
-    let peerData = peersRef.current.get(fromParticipantId);
-    
-    // If we receive an offer but don't have a peer, create one
-    if (!peerData && signal.type === "offer") {
-      if (!streamReadyRef.current) {
-        console.error("No local stream available for peer connection - stream not ready yet");
-        return;
-      }
-      const stream = getOutboundStream();
-      if (!stream) {
-        console.error("No outbound stream available for peer connection");
-        return;
-      }
-      peerData = createPeerConnectionWithStream(fromParticipantId, false, stream);
-    }
-    
-    if (!peerData) {
-      console.error("No peer connection for signal from:", fromParticipantId);
-      return;
-    }
+  const handleSignal = useCallback(
+    async (
+      fromParticipantId: string,
+      signal: { type: string; sdp?: any; candidate?: any }
+    ) => {
+      console.log(`\n📥 [SIGNAL] ============================================`);
+      console.log(
+        `📥 [SIGNAL] Received from ${fromParticipantId}: ${signal.type}`
+      );
 
-    const pc = peerData._pc as RTCPeerConnection;
-    
-    if (signal.type === "offer" && signal.sdp) {
-      pc.setRemoteDescription(new RTCSessionDescription(signal.sdp))
-        .then(() => pc.createAnswer())
-        .then(answer => pc.setLocalDescription(answer))
-        .then(() => {
-          console.log(`📤 Sending answer to ${fromParticipantId}`);
-          wsRef.current?.send(JSON.stringify({
-            type: "signal",
-            roomId,
-            participantId,
-            targetId: fromParticipantId,
-            signal: { type: "answer", sdp: pc.localDescription },
-          }));
-        })
-        .catch(err => console.error("Error handling offer:", err));
-    } else if (signal.type === "answer" && signal.sdp) {
-      pc.setRemoteDescription(new RTCSessionDescription(signal.sdp))
-        .catch(err => console.error("Error setting remote description:", err));
-    } else if (signal.type === "candidate" && signal.candidate) {
-      pc.addIceCandidate(new RTCIceCandidate(signal.candidate))
-        .catch(err => console.error("Error adding ICE candidate:", err));
-    }
-  }, [backgroundProcessedStream, processedStream, localStream, roomId, participantId]);
+      let peerData = peersRef.current.get(fromParticipantId);
+
+      // If we receive an offer but don't have a peer, create one as non-initiator
+      if (!peerData && signal.type === "offer") {
+        console.log(
+          `📥 [SIGNAL] Received offer but no peer exists, creating peer connection...`
+        );
+        if (!localStream) {
+          console.error(
+            "❌ [SIGNAL] CRITICAL: Cannot create peer - no local stream!"
+          );
+          console.error(
+            "❌ [SIGNAL] streamReadyRef.current:",
+            streamReadyRef.current
+          );
+          return;
+        }
+        peerData = createPeerConnection(fromParticipantId, false);
+        if (!peerData) {
+          console.error("❌ [SIGNAL] Failed to create peer connection!");
+          return;
+        }
+      }
+
+      if (!peerData) {
+        console.error(
+          `❌ [SIGNAL] No peer connection for ${fromParticipantId}!`
+        );
+        return;
+      }
+
+      const pc = peerData._pc as RTCPeerConnection;
+      console.log(
+        `📥 [SIGNAL] Using peer connection, current state: ${pc.signalingState}`
+      );
+
+      try {
+        if (signal.type === "offer" && signal.sdp) {
+          console.log(`📝 [ANSWER] Processing offer from ${fromParticipantId}`);
+          await pc.setRemoteDescription(new RTCSessionDescription(signal.sdp));
+          console.log(`📝 [ANSWER] Remote description set, creating answer...`);
+          const answer = await pc.createAnswer();
+          await pc.setLocalDescription(answer);
+          console.log(`📤 [ANSWER] Sending answer to ${fromParticipantId}`);
+          wsRef.current?.send(
+            JSON.stringify({
+              type: "signal",
+              roomId,
+              participantId,
+              targetId: fromParticipantId,
+              signal: { type: "answer", sdp: pc.localDescription },
+            })
+          );
+        }
+
+        if (signal.type === "answer" && signal.sdp) {
+          console.log(
+            `✅ [ANSWER] Processing answer from ${fromParticipantId}`
+          );
+          await pc.setRemoteDescription(new RTCSessionDescription(signal.sdp));
+          console.log(`✅ [ANSWER] Remote description set successfully`);
+        }
+
+        if (signal.type === "candidate" && signal.candidate) {
+          console.log(
+            `🧊 [ICE] Adding ICE candidate from ${fromParticipantId}`
+          );
+          await pc.addIceCandidate(new RTCIceCandidate(signal.candidate));
+          console.log(`✅ [ICE] ICE candidate added successfully`);
+        }
+      } catch (err) {
+        console.error(
+          `❌ [SIGNAL] Error handling signal from ${fromParticipantId}:`,
+          err
+        );
+      }
+    },
+    [roomId, participantId, localStream, createPeerConnection]
+  );
 
   // Initiate connections to all existing participants
-  const initiateConnections = useCallback((otherParticipants: Participant[]) => {
-    // If stream isn't ready yet, queue the participants for later
-    if (!streamReadyRef.current) {
-      console.log("⏳ Stream not ready yet, queueing connections for:", otherParticipants.map(p => p.name).join(", "));
-      pendingConnectionsRef.current = [...pendingConnectionsRef.current, ...otherParticipants];
-      return;
-    }
-
-    const stream = getOutboundStream();
-    if (!stream) {
-      console.error("❌ No outbound stream available for initiating connections");
-      pendingConnectionsRef.current = [...pendingConnectionsRef.current, ...otherParticipants];
-      return;
-    }
-
-    console.log("🚀 Initiating connections to:", otherParticipants.map(p => p.name).join(", "));
-    otherParticipants.forEach(participant => {
-      if (participant.id !== participantId && participant.approvalStatus === "approved") {
-        createPeerConnectionWithStream(participant.id, true, stream);
+  const initiateConnections = useCallback(
+    (otherParticipants: Participant[]) => {
+      // If stream isn't ready yet, queue the participants for later
+      if (!streamReadyRef.current || !localStream) {
+        console.log(
+          "⏳ Stream not ready yet, queueing connections for:",
+          otherParticipants.map((p) => p.name).join(", ")
+        );
+        pendingConnectionsRef.current = [
+          ...pendingConnectionsRef.current,
+          ...otherParticipants,
+        ];
+        return;
       }
-    });
-  }, [participantId, backgroundProcessedStream, processedStream, localStream]);
+
+      console.log(
+        "🚀 Initiating connections to:",
+        otherParticipants.map((p) => p.name).join(", ")
+      );
+      otherParticipants.forEach((participant) => {
+        if (
+          participant.id !== participantId &&
+          participant.approvalStatus === "approved"
+        ) {
+          createPeerConnection(participant.id, true);
+        }
+      });
+    },
+    [participantId, localStream, createPeerConnection]
+  );
 
   const connectWebSocket = () => {
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
     const host = window.location.host;
     const wsUrl = `${protocol}//${host}/ws`;
-    
+
     console.log("Connecting to WebSocket:", wsUrl);
-    
+
     const ws = new WebSocket(wsUrl);
-    
+
     ws.onopen = () => {
       console.log("WebSocket connected successfully");
       setIsReconnecting(false);
       reconnectAttemptsRef.current = 0;
-      
+
       if (reconnectTimeoutRef.current) {
         clearTimeout(reconnectTimeoutRef.current);
         reconnectTimeoutRef.current = null;
       }
-      
-      ws.send(JSON.stringify({
-        type: "join-room",
-        roomId,
-        participantId,
-        participantName,
-      }));
-      
+
+      ws.send(
+        JSON.stringify({
+          type: "join-room",
+          roomId,
+          participantId,
+          participantName,
+        })
+      );
+
       if (reconnectAttemptsRef.current > 0) {
         toast({
           title: "Reconnected",
@@ -749,7 +935,7 @@ export default function Room() {
 
     ws.onclose = (event) => {
       console.log("WebSocket disconnected", event.code, event.reason);
-      
+
       if (event.code !== 1000 && event.code !== 1001) {
         attemptReconnect();
       }
@@ -762,23 +948,29 @@ export default function Room() {
     const maxAttempts = 10;
     const baseDelay = 1000;
     const maxDelay = 30000;
-    
+
     if (reconnectAttemptsRef.current >= maxAttempts) {
       toast({
         title: "Connection Lost",
-        description: "Could not reconnect to the server. Please refresh the page.",
+        description:
+          "Could not reconnect to the server. Please refresh the page.",
         variant: "destructive",
       });
       return;
     }
-    
+
     reconnectAttemptsRef.current += 1;
-    const delay = Math.min(baseDelay * Math.pow(2, reconnectAttemptsRef.current - 1), maxDelay);
-    
+    const delay = Math.min(
+      baseDelay * Math.pow(2, reconnectAttemptsRef.current - 1),
+      maxDelay
+    );
+
     setIsReconnecting(true);
-    
-    console.log(`Reconnect attempt ${reconnectAttemptsRef.current}/${maxAttempts} in ${delay}ms`);
-    
+
+    console.log(
+      `Reconnect attempt ${reconnectAttemptsRef.current}/${maxAttempts} in ${delay}ms`
+    );
+
     reconnectTimeoutRef.current = window.setTimeout(() => {
       console.log("Attempting to reconnect...");
       connectWebSocket();
@@ -787,7 +979,7 @@ export default function Room() {
 
   const handleWebSocketMessage = (message: any) => {
     console.log("Received WebSocket message:", message.type);
-    
+
     switch (message.type) {
       case "waiting-approval":
         setIsWaitingApproval(true);
@@ -803,7 +995,8 @@ export default function Room() {
         });
         // Initiate WebRTC connections to other approved participants
         const approvedParticipants = message.participants.filter(
-          (p: Participant) => p.id !== participantId && p.approvalStatus === "approved"
+          (p: Participant) =>
+            p.id !== participantId && p.approvalStatus === "approved"
         );
         if (approvedParticipants.length > 0) {
           setTimeout(() => initiateConnections(approvedParticipants), 500);
@@ -821,7 +1014,7 @@ export default function Room() {
 
       case "join-request":
         if (message.participant.id !== participantId) {
-          setParticipants(prev => [...prev, message.participant]);
+          setParticipants((prev) => [...prev, message.participant]);
           toast({
             title: "New Join Request",
             description: `${message.participant.name} wants to join the meeting`,
@@ -830,34 +1023,27 @@ export default function Room() {
         break;
 
       case "participant-approved":
-        setParticipants(prev => prev.map(p =>
-          p.id === message.participantId ? { ...p, approvalStatus: "approved" } : p
-        ));
+        setParticipants((prev) =>
+          prev.map((p) =>
+            p.id === message.participantId
+              ? { ...p, approvalStatus: "approved" }
+              : p
+          )
+        );
         // Existing participants should initiate connection to newly approved participant
         if (message.participantId !== participantId) {
-          if (streamReadyRef.current) {
-            const stream = getOutboundStream();
-            if (stream) {
-              console.log(`🔗 Initiating connection to newly approved participant: ${message.participantId}`);
-              setTimeout(() => createPeerConnectionWithStream(message.participantId, true, stream), 500);
-            } else {
-              console.log("⏳ No outbound stream, queueing connection for newly approved participant");
-              pendingConnectionsRef.current.push({
-                id: message.participantId,
-                name: "Pending",
-                roomId: roomId,
-                isAudioEnabled: true,
-                isVideoEnabled: true,
-                isScreenSharing: false,
-                isHost: false,
-                approvalStatus: "approved",
-                handRaised: false,
-                canRecord: false,
-                joinedAt: Date.now(),
-              });
-            }
+          if (streamReadyRef.current && localStream) {
+            console.log(
+              `🔗 Initiating connection to newly approved participant: ${message.participantId}`
+            );
+            setTimeout(
+              () => createPeerConnection(message.participantId, true),
+              500
+            );
           } else {
-            console.log("⏳ Stream not ready, queueing connection for newly approved participant");
+            console.log(
+              "⏳ Stream not ready, queueing connection for newly approved participant"
+            );
             pendingConnectionsRef.current.push({
               id: message.participantId,
               name: "Pending",
@@ -876,7 +1062,9 @@ export default function Room() {
         break;
 
       case "participant-denied":
-        setParticipants(prev => prev.filter(p => p.id !== message.participantId));
+        setParticipants((prev) =>
+          prev.filter((p) => p.id !== message.participantId)
+        );
         break;
 
       case "removed-from-room":
@@ -887,10 +1075,12 @@ export default function Room() {
         });
         setTimeout(() => setLocation("/"), 2000);
         break;
-      
+
       case "participant-left":
-        setParticipants(prev => prev.filter(p => p.id !== message.participantId));
-        setRemoteStreams(prev => {
+        setParticipants((prev) =>
+          prev.filter((p) => p.id !== message.participantId)
+        );
+        setRemoteStreams((prev) => {
           const newStreams = new Map(prev);
           newStreams.delete(message.participantId);
           return newStreams;
@@ -905,18 +1095,21 @@ export default function Room() {
           description: `${message.participantName} left the meeting`,
         });
         break;
-      
+
       case "participants-list":
         console.log("Received participants list:", message.participants);
         setIsHost(true);
         setIsWaitingApproval(false);
         setParticipants(message.participants);
         // Set canRecord from participant data (host gets it automatically)
-        const self = message.participants.find((p: any) => p.id === participantId);
+        const self = message.participants.find(
+          (p: any) => p.id === participantId
+        );
         if (self) setCanRecord(self.canRecord || false);
         // Initiate WebRTC connections to other approved participants
         const otherParticipants = message.participants.filter(
-          (p: Participant) => p.id !== participantId && p.approvalStatus === "approved"
+          (p: Participant) =>
+            p.id !== participantId && p.approvalStatus === "approved"
         );
         if (otherParticipants.length > 0) {
           // Small delay to ensure local stream is ready
@@ -928,29 +1121,43 @@ export default function Room() {
         // Handle incoming WebRTC signaling data
         handleSignal(message.participantId, message.signal);
         break;
-      
+
       case "chat-message":
-        setMessages(prev => [...prev, message.message]);
+        setMessages((prev) => [...prev, message.message]);
         break;
-      
+
       case "audio-toggled":
-        setParticipants(prev => prev.map(p => 
-          p.id === message.participantId ? { ...p, isAudioEnabled: message.isEnabled } : p
-        ));
+        setParticipants((prev) =>
+          prev.map((p) =>
+            p.id === message.participantId
+              ? { ...p, isAudioEnabled: message.isEnabled }
+              : p
+          )
+        );
         break;
-      
+
       case "video-toggled":
-        setParticipants(prev => prev.map(p => 
-          p.id === message.participantId ? { ...p, isVideoEnabled: message.isEnabled } : p
-        ));
+        setParticipants((prev) =>
+          prev.map((p) =>
+            p.id === message.participantId
+              ? { ...p, isVideoEnabled: message.isEnabled }
+              : p
+          )
+        );
         break;
-      
+
       case "screen-share":
-        setParticipants(prev => prev.map(p => 
-          p.id === message.participantId ? { ...p, isScreenSharing: message.isSharing } : p
-        ));
+        setParticipants((prev) =>
+          prev.map((p) =>
+            p.id === message.participantId
+              ? { ...p, isScreenSharing: message.isSharing }
+              : p
+          )
+        );
         if (message.isSharing) {
-          const participant = participants.find(p => p.id === message.participantId);
+          const participant = participants.find(
+            (p) => p.id === message.participantId
+          );
           if (participant && participant.id !== participantId) {
             toast({
               title: "Screen Sharing Started",
@@ -959,13 +1166,19 @@ export default function Room() {
           }
         }
         break;
-      
+
       case "hand-raised":
-        setParticipants(prev => prev.map(p => 
-          p.id === message.participantId ? { ...p, handRaised: message.isRaised } : p
-        ));
+        setParticipants((prev) =>
+          prev.map((p) =>
+            p.id === message.participantId
+              ? { ...p, handRaised: message.isRaised }
+              : p
+          )
+        );
         if (message.isRaised) {
-          const participant = participants.find(p => p.id === message.participantId);
+          const participant = participants.find(
+            (p) => p.id === message.participantId
+          );
           if (participant && participant.id !== participantId) {
             toast({
               title: "Hand Raised",
@@ -974,36 +1187,42 @@ export default function Room() {
           }
         }
         break;
-      
+
       case "emoji-reaction":
         const reactionId = `${message.participantId}-${Date.now()}`;
-        setReactions(prev => [...prev, { id: reactionId, emoji: message.emoji }]);
+        setReactions((prev) => [
+          ...prev,
+          { id: reactionId, emoji: message.emoji },
+        ]);
         break;
-      
+
       case "file-share":
-        setSharedFiles(prev => [...prev, message.file]);
+        setSharedFiles((prev) => [...prev, message.file]);
         break;
-      
+
       case "mute-all-command":
         if (!isHost && isAudioEnabled) {
-          localStream?.getAudioTracks().forEach(track => {
+          localStream?.getAudioTracks().forEach((track) => {
             track.enabled = false;
           });
-          processedStream?.getAudioTracks().forEach(track => {
+          processedStream?.getAudioTracks().forEach((track) => {
             track.enabled = false;
           });
           setIsAudioEnabled(false);
-          
-          wsRef.current?.send(JSON.stringify({
-            type: "toggle-audio",
-            roomId,
-            participantId,
-            isEnabled: false,
-          }));
-          
+
+          wsRef.current?.send(
+            JSON.stringify({
+              type: "toggle-audio",
+              roomId,
+              participantId,
+              isEnabled: false,
+            })
+          );
+
           toast({
             title: "Muted by Host",
-            description: "The host has muted all participants. You can unmute yourself.",
+            description:
+              "The host has muted all participants. You can unmute yourself.",
           });
         }
         break;
@@ -1012,7 +1231,7 @@ export default function Room() {
         setIsRoomLocked(message.isLocked);
         toast({
           title: message.isLocked ? "Room Locked" : "Room Unlocked",
-          description: message.isLocked 
+          description: message.isLocked
             ? "The room is now locked. New participants cannot join."
             : "The room is now unlocked. New participants can join.",
         });
@@ -1028,10 +1247,12 @@ export default function Room() {
         break;
 
       case "host-transferred":
-        setParticipants(prev => prev.map(p => ({
-          ...p,
-          isHost: p.id === message.newHostId,
-        })));
+        setParticipants((prev) =>
+          prev.map((p) => ({
+            ...p,
+            isHost: p.id === message.newHostId,
+          }))
+        );
         setIsHost(participantId === message.newHostId);
         toast({
           title: "Host Transferred",
@@ -1057,7 +1278,9 @@ export default function Room() {
       case "audio-force-disabled":
         if (message.targetParticipantId === participantId) {
           setIsAudioEnabled(false);
-          localStream?.getAudioTracks().forEach(track => track.enabled = false);
+          localStream
+            ?.getAudioTracks()
+            .forEach((track) => (track.enabled = false));
           toast({
             title: "Audio Disabled by Host",
             description: "The host has disabled your audio",
@@ -1069,7 +1292,9 @@ export default function Room() {
       case "video-force-disabled":
         if (message.targetParticipantId === participantId) {
           setIsVideoEnabled(false);
-          localStream?.getVideoTracks().forEach(track => track.enabled = false);
+          localStream
+            ?.getVideoTracks()
+            .forEach((track) => (track.enabled = false));
           toast({
             title: "Video Disabled by Host",
             description: "The host has disabled your video",
@@ -1082,9 +1307,11 @@ export default function Room() {
         if (message.targetParticipantId === participantId) {
           setCanRecord(message.canRecord);
           toast({
-            title: message.canRecord ? "Recording Enabled" : "Recording Disabled",
-            description: message.canRecord 
-              ? "You can now start recording" 
+            title: message.canRecord
+              ? "Recording Enabled"
+              : "Recording Disabled",
+            description: message.canRecord
+              ? "You can now start recording"
               : "Your recording permission has been revoked",
           });
         }
@@ -1093,30 +1320,36 @@ export default function Room() {
   };
 
   const approveParticipant = (targetParticipantId: string) => {
-    wsRef.current?.send(JSON.stringify({
-      type: "approve-participant",
-      roomId,
-      participantId,
-      targetParticipantId,
-    }));
+    wsRef.current?.send(
+      JSON.stringify({
+        type: "approve-participant",
+        roomId,
+        participantId,
+        targetParticipantId,
+      })
+    );
   };
 
   const denyParticipant = (targetParticipantId: string) => {
-    wsRef.current?.send(JSON.stringify({
-      type: "deny-participant",
-      roomId,
-      participantId,
-      targetParticipantId,
-    }));
+    wsRef.current?.send(
+      JSON.stringify({
+        type: "deny-participant",
+        roomId,
+        participantId,
+        targetParticipantId,
+      })
+    );
   };
 
   const removeParticipant = (targetParticipantId: string) => {
-    wsRef.current?.send(JSON.stringify({
-      type: "remove-participant",
-      roomId,
-      participantId,
-      targetParticipantId,
-    }));
+    wsRef.current?.send(
+      JSON.stringify({
+        type: "remove-participant",
+        roomId,
+        participantId,
+        targetParticipantId,
+      })
+    );
     toast({
       title: "Participant Removed",
       description: "The participant has been removed from the room",
@@ -1125,274 +1358,442 @@ export default function Room() {
 
   const toggleAudio = async () => {
     const turningOff = isAudioEnabled;
-    console.log(`🎤 Microphone: ${turningOff ? 'OFF' : 'ON'}`);
-    
+    console.log(`\n🎤 [AUDIO] ============================================`);
+    console.log(`🎤 [AUDIO] Toggle: ${turningOff ? "OFF" : "ON"}`);
+
     if (turningOff) {
-      // === TURN OFF ===
-      // 1. Stop peer connection tracks
-      peersRef.current.forEach((peer) => {
-        peer._pc?.getSenders().forEach((sender: RTCRtpSender) => {
-          if (sender.track?.kind === 'audio') {
-            sender.track.stop();
-            sender.replaceTrack(null);
-          }
-        });
-      });
-      
-      // 2. Stop local audio tracks
-      localStream?.getAudioTracks().forEach(t => t.stop());
-      processedStream?.getAudioTracks().forEach(t => t.stop());
-      
-      // 3. Update state
-      setIsAudioEnabled(false);
-      setParticipants(prev => prev.map(p => 
-        p.id === participantId ? { ...p, isAudioEnabled: false } : p
-      ));
-      
-      wsRef.current?.send(JSON.stringify({
-        type: "toggle-audio", roomId, participantId, isEnabled: false,
-      }));
-      
-      console.log(`✅ Microphone OFF`);
-    } else {
-      // === TURN ON ===
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          audio: { echoCancellation: true, noiseSuppression: true, sampleRate: 48000 },
-        });
-        const newAudioTrack = stream.getAudioTracks()[0];
-        
-        // Get ONLY live video tracks (not stopped ones)
-        const liveVideoTracks = (localStream?.getVideoTracks() || [])
-          .filter(t => t.readyState === 'live');
-        
-        // Create fresh streams with any live video + new audio
-        const newLocalStream = new MediaStream([...liveVideoTracks, newAudioTrack]);
-        const newProcessedStream = new MediaStream([
-          ...liveVideoTracks.map(t => t.clone()), 
-          newAudioTrack.clone()
-        ]);
-        
-        // Update peer connections
-        peersRef.current.forEach((peer) => {
-          peer._pc?.getSenders().forEach((sender: RTCRtpSender) => {
-            if (!sender.track || sender.track.kind === 'audio') {
-              sender.replaceTrack(newAudioTrack.clone());
-            }
-          });
-        });
-        
-        // Update state
-        setLocalStream(newLocalStream);
-        setProcessedStream(newProcessedStream);
-        setIsAudioEnabled(true);
-        setParticipants(prev => prev.map(p => 
-          p.id === participantId ? { ...p, isAudioEnabled: true } : p
-        ));
-        
-        wsRef.current?.send(JSON.stringify({
-          type: "toggle-audio", roomId, participantId, isEnabled: true,
-        }));
-        
-        console.log(`✅ Microphone ON`);
-      } catch (err) {
-        console.error("Microphone error:", err);
-        toast({ title: "Microphone Error", description: "Cannot access microphone.", variant: "destructive" });
+      // === TURN AUDIO OFF ===
+      console.log("🎤 [AUDIO] Turning microphone OFF...");
+      const audioTrack = localStream?.getAudioTracks()[0];
+
+      if (audioTrack) {
+        console.log(
+          `🎤 [AUDIO] Stopping audio track: ${audioTrack.id.substr(0, 8)}...`
+        );
+        audioTrack.stop(); // Release hardware
       }
+
+      // Replace with null in all peer connections
+      console.log(
+        `🎤 [AUDIO] Removing audio from ${peersRef.current.size} peer connections...`
+      );
+      peersRef.current.forEach((peerData, peerId) => {
+        const audioTransceiver = peerData._pc
+          .getTransceivers()
+          .find((t) => t.receiver.track?.kind === "audio");
+
+        if (audioTransceiver) {
+          console.log(`  🎤 [AUDIO] Replacing with null for peer ${peerId}`);
+          audioTransceiver.sender
+            .replaceTrack(null)
+            .catch((err) =>
+              console.error(`❌ [AUDIO] Failed for peer ${peerId}:`, err)
+            );
+        }
+      });
+
+      // Update localStream state - create new stream with only video
+      const videoTracks = localStream?.getVideoTracks() || [];
+      const videoOnlyStream = new MediaStream(videoTracks);
+      setLocalStream(videoOnlyStream);
+      console.log(
+        `🎤 [AUDIO] Updated localStream to video-only (${videoTracks.length} video tracks)`
+      );
+
+      setIsAudioEnabled(false);
+      setParticipants((prev) =>
+        prev.map((p) =>
+          p.id === participantId ? { ...p, isAudioEnabled: false } : p
+        )
+      );
+
+      wsRef.current?.send(
+        JSON.stringify({
+          type: "toggle-audio",
+          roomId,
+          participantId,
+          isEnabled: false,
+        })
+      );
+
+      console.log("✅ [AUDIO] Microphone OFF - Hardware released");
+      return;
+    }
+
+    // === TURN AUDIO ON ===
+    try {
+      console.log("🎤 [AUDIO] Requesting new microphone access...");
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          sampleRate: 48000,
+        },
+      });
+      const newAudioTrack = stream.getAudioTracks()[0];
+      console.log(
+        `🎤 [AUDIO] Got new audio track: ${newAudioTrack.id.substr(0, 8)}...`
+      );
+
+      // Get existing video tracks
+      const videoTracks = localStream?.getVideoTracks() || [];
+      console.log(`🎤 [AUDIO] Preserving ${videoTracks.length} video tracks`);
+
+      // Create a NEW MediaStream with existing video + new audio
+      const updatedStream = new MediaStream([...videoTracks, newAudioTrack]);
+      console.log(
+        `🎤 [AUDIO] Created new stream with ${
+          updatedStream.getTracks().length
+        } tracks`
+      );
+
+      // Update localStream state - this triggers re-render
+      setLocalStream(updatedStream);
+      console.log(`🎤 [AUDIO] Updated localStream state`);
+
+      // Update remote peers
+      console.log(
+        `🎤 [AUDIO] Updating ${peersRef.current.size} peer connections...`
+      );
+      peersRef.current.forEach((peerData, peerId) => {
+        const audioTransceiver = peerData._pc
+          .getTransceivers()
+          .find((t) => t.receiver.track?.kind === "audio");
+
+        if (audioTransceiver) {
+          console.log(`  🎤 [AUDIO] Replacing audio track for peer ${peerId}`);
+          audioTransceiver.sender
+            .replaceTrack(newAudioTrack)
+            .catch((err) =>
+              console.error(`❌ [AUDIO] Failed for peer ${peerId}:`, err)
+            );
+        } else {
+          console.log(`  🎤 [AUDIO] Adding new audio track for peer ${peerId}`);
+          peerData._pc.addTrack(newAudioTrack, updatedStream);
+        }
+      });
+
+      setIsAudioEnabled(true);
+      setParticipants((prev) =>
+        prev.map((p) =>
+          p.id === participantId ? { ...p, isAudioEnabled: true } : p
+        )
+      );
+
+      wsRef.current?.send(
+        JSON.stringify({
+          type: "toggle-audio",
+          roomId,
+          participantId,
+          isEnabled: true,
+        })
+      );
+
+      console.log("✅ [AUDIO] Microphone ON - Audio track active");
+    } catch (err) {
+      console.error("❌ [AUDIO] Microphone error:", err);
+      toast({
+        title: "Microphone Error",
+        description: "Unable to access microphone.",
+        variant: "destructive",
+      });
     }
   };
 
   const toggleVideo = async () => {
     const turningOff = isVideoEnabled;
-    console.log(`📷 Camera: ${turningOff ? 'OFF' : 'ON'}`);
-    
+
+    //
+    // ===========================================
+    //           TURN VIDEO OFF
+    // ===========================================
+    //
     if (turningOff) {
-      // === TURN OFF - Release camera hardware completely ===
-      
-      // 1. First, stop ALL video tracks on backgroundProcessedStream BEFORE clearing it
-      if (backgroundProcessedStream) {
-        backgroundProcessedStream.getVideoTracks().forEach(track => {
-          console.log(`🛑 Stopping background video track: ${track.id}`);
-          track.stop();
-        });
+      console.log("📷 [VIDEO] Turning camera OFF...");
+      const videoTrack = localStream?.getVideoTracks()[0];
+
+      if (videoTrack) {
+        console.log(
+          `📷 [VIDEO] Stopping video track: ${videoTrack.id.substr(0, 8)}...`
+        );
+        videoTrack.stop();
       }
-      
-      // 2. Stop background processor (clears internal video element srcObject)
-      backgroundProcessorRef.current?.stopProcessing();
-      setBackgroundProcessedStream(null);
-      
-      // 3. Stop media processor video tracks
-      mediaProcessorRef.current?.stopVideoTracks();
-      
-      // 4. Stop peer connection tracks (clones that keep hardware alive)
-      peersRef.current.forEach((peer, peerId) => {
-        peer._pc?.getSenders().forEach((sender: RTCRtpSender) => {
-          if (sender.track?.kind === 'video') {
-            console.log(`🛑 Stopping peer ${peerId} video track: ${sender.track.id}`);
-            sender.track.stop();
-            sender.replaceTrack(null);
-          }
-        });
+
+      // Stop sending video to all peers
+      console.log(
+        `📷 [VIDEO] Removing video from ${peersRef.current.size} peer connections...`
+      );
+      peersRef.current.forEach(({ _pc }, peerId) => {
+        const sender = _pc.getSenders().find((s) => s.track?.kind === "video");
+        if (sender) {
+          console.log(`  📷 [VIDEO] Replacing with null for peer ${peerId}`);
+          sender
+            .replaceTrack(null)
+            .catch((err) =>
+              console.error(
+                `❌ [VIDEO] Failed to replace track for peer ${peerId}:`,
+                err
+              )
+            );
+        }
       });
-      
-      // 5. Stop AND remove all video tracks from localStream
-      if (localStream) {
-        const videoTracks = localStream.getVideoTracks();
-        videoTracks.forEach(t => {
-          console.log(`🛑 Stopping local video track: ${t.id}, readyState: ${t.readyState}`);
-          t.stop();
-          localStream.removeTrack(t);
-        });
-        // Create new stream with only audio to help garbage collection
-        const audioOnly = new MediaStream(localStream.getAudioTracks().filter(t => t.readyState === 'live'));
-        setLocalStream(audioOnly);
-      }
-      
-      // 6. Stop AND remove all video tracks from processedStream
-      if (processedStream) {
-        const videoTracks = processedStream.getVideoTracks();
-        videoTracks.forEach(t => {
-          console.log(`🛑 Stopping processed video track: ${t.id}, readyState: ${t.readyState}`);
-          t.stop();
-          processedStream.removeTrack(t);
-        });
-        const audioOnly = new MediaStream(processedStream.getAudioTracks().filter(t => t.readyState === 'live'));
-        setProcessedStream(audioOnly);
-      }
-      
-      // 7. Update state
+
+      // Update localStream state - create new stream with only audio
+      const audioTracks = localStream?.getAudioTracks() || [];
+      const audioOnlyStream = new MediaStream(audioTracks);
+      setLocalStream(audioOnlyStream);
+      console.log(
+        `📷 [VIDEO] Updated localStream to audio-only (${audioTracks.length} audio tracks)`
+      );
+
       setIsVideoEnabled(false);
-      setParticipants(prev => prev.map(p => 
-        p.id === participantId ? { ...p, isVideoEnabled: false } : p
-      ));
-      
-      wsRef.current?.send(JSON.stringify({
-        type: "toggle-video", roomId, participantId, isEnabled: false,
-      }));
-      
-      console.log(`✅ Camera OFF - All video tracks stopped, hardware should be released`);
-    } else {
-      // === TURN ON - Request fresh camera access ===
-      try {
-        console.log(`📷 Requesting camera access...`);
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: { width: 1920, height: 1080 },
-        });
-        const newVideoTrack = stream.getVideoTracks()[0];
-        console.log(`📷 Got new video track: ${newVideoTrack.id}`);
-        
-        // Get ONLY live audio tracks (not stopped ones)
-        const liveAudioTracks = (localStream?.getAudioTracks() || [])
-          .filter(t => t.readyState === 'live');
-        
-        // Also check processedStream for audio tracks
-        const processedAudioTracks = (processedStream?.getAudioTracks() || [])
-          .filter(t => t.readyState === 'live');
-        
-        // Use whichever has live audio tracks
-        const audioTracks = processedAudioTracks.length > 0 ? processedAudioTracks : liveAudioTracks;
-        
-        // Create fresh streams with new video + any live audio
-        const newLocalStream = new MediaStream([newVideoTrack, ...liveAudioTracks]);
-        const newProcessedStream = new MediaStream([
-          newVideoTrack.clone(), 
-          ...audioTracks.map(t => t.clone())
-        ]);
-        
-        // Add video track to media processor output stream
-        mediaProcessorRef.current?.addVideoTrack(newVideoTrack.clone());
-        
-        // Update all native RTCPeerConnections with new video track
-        peersRef.current.forEach((peer, peerId) => {
-          peer._pc?.getSenders().forEach((sender: RTCRtpSender) => {
-            if (!sender.track || sender.track.kind === 'video') {
-              console.log(`📷 Replacing video track for peer ${peerId}`);
-              sender.replaceTrack(newVideoTrack.clone());
-            }
-          });
-        });
-        
-        // Update state (new references trigger React re-render)
-        setLocalStream(newLocalStream);
-        setProcessedStream(newProcessedStream);
-        setIsVideoEnabled(true);
-        setParticipants(prev => prev.map(p => 
+      setParticipants((prev) =>
+        prev.map((p) =>
+          p.id === participantId ? { ...p, isVideoEnabled: false } : p
+        )
+      );
+
+      wsRef.current?.send(
+        JSON.stringify({
+          type: "toggle-video",
+          roomId,
+          participantId,
+          isEnabled: false,
+        })
+      );
+
+      console.log("✅ [VIDEO] Camera OFF - Hardware released");
+      return;
+    }
+
+    //
+    // ===========================================
+    //           TURN VIDEO ON
+    // ===========================================
+    //
+
+    try {
+      console.log("📷 [VIDEO] Requesting new camera access...");
+
+      // Get a NEW video stream
+      const newStream = await navigator.mediaDevices.getUserMedia({
+        video: { width: 1920, height: 1080 },
+      });
+
+      const newVideoTrack = newStream.getVideoTracks()[0];
+      console.log(
+        `📷 [VIDEO] Got new video track: ${newVideoTrack.id.substr(0, 8)}...`
+      );
+
+      // Get existing audio tracks
+      const audioTracks = localStream?.getAudioTracks() || [];
+      console.log(`📷 [VIDEO] Preserving ${audioTracks.length} audio tracks`);
+
+      // Create a NEW MediaStream with new video + existing audio
+      const updatedStream = new MediaStream([newVideoTrack, ...audioTracks]);
+      console.log(
+        `📷 [VIDEO] Created new stream with ${
+          updatedStream.getTracks().length
+        } tracks`
+      );
+
+      // Update localStream state - this triggers re-render in VideoGrid
+      setLocalStream(updatedStream);
+      console.log(`📷 [VIDEO] Updated localStream state`);
+
+      // Update remote peers correctly
+      console.log(
+        `📷 [VIDEO] Updating ${peersRef.current.size} peer connections...`
+      );
+      peersRef.current.forEach(({ _pc }, peerId) => {
+        const sender = _pc.getSenders().find((s) => s.track?.kind === "video");
+
+        if (sender) {
+          console.log(`  📷 [VIDEO] Replacing video track for peer ${peerId}`);
+          sender
+            .replaceTrack(newVideoTrack)
+            .catch((err) =>
+              console.error(
+                `❌ [VIDEO] Failed to replace track for peer ${peerId}:`,
+                err
+              )
+            );
+        } else {
+          console.log(`  📷 [VIDEO] Adding new video track for peer ${peerId}`);
+          _pc.addTrack(newVideoTrack, updatedStream);
+        }
+      });
+
+      setIsVideoEnabled(true);
+      setParticipants((prev) =>
+        prev.map((p) =>
           p.id === participantId ? { ...p, isVideoEnabled: true } : p
-        ));
-        
-        wsRef.current?.send(JSON.stringify({
-          type: "toggle-video", roomId, participantId, isEnabled: true,
-        }));
-        
-        console.log(`✅ Camera ON - Hardware activated`);
-      } catch (err) {
-        console.error("Camera error:", err);
-        toast({ title: "Camera Error", description: "Cannot access camera.", variant: "destructive" });
-      }
+        )
+      );
+
+      wsRef.current?.send(
+        JSON.stringify({
+          type: "toggle-video",
+          roomId,
+          participantId,
+          isEnabled: true,
+        })
+      );
+
+      console.log("✅ [VIDEO] Camera ON - Video track active and rendering");
+    } catch (err) {
+      console.error("❌ [VIDEO] Camera error:", err);
+
+      toast({
+        title: "Camera Error",
+        description: "Unable to access camera.",
+        variant: "destructive",
+      });
     }
   };
 
-  const stopScreenShare = (source: 'manual' | 'browser') => {
+  const stopScreenShare = (source: "manual" | "browser") => {
     if (!isScreenSharingRef.current) return;
-    
+    screenStream?.getTracks().forEach((track) => {
+      console.log(`🛑 Stopping screen share track: ${track.id}`);
+      track.stop();
+    });
+
+    // 2. Restore original video track in all peer connections
+    const originalVideoTrack = originalVideoTrackRef.current;
+    if (originalVideoTrack && isVideoEnabled) {
+      peersRef.current.forEach((peer, peerId) => {
+        const videoSender = peer._pc
+          ?.getSenders()
+          .find((s: RTCRtpSender) => s.track?.kind === "video");
+        if (videoSender) {
+          console.log(`📹 Restoring camera track for peer ${peerId}`);
+          videoSender
+            .replaceTrack(originalVideoTrack)
+            .catch((err: Error) =>
+              console.error(`Failed to restore camera for peer ${peerId}:`, err)
+            );
+        }
+      });
+
+      // Restore camera track in local stream (don't create new stream)
+      if (localStream) {
+        // Remove screen share track if it exists
+        const screenTracks = localStream.getVideoTracks();
+        screenTracks.forEach((t) => localStream.removeTrack(t));
+        // Add back camera track
+        localStream.addTrack(originalVideoTrack);
+        console.log(`Restored camera track to localStream`);
+      }
+    }
+
+    // 3. Clean up state
     isScreenSharingRef.current = false;
     setIsScreenSharing(false);
-    screenStream?.getTracks().forEach(track => track.stop());
     setScreenStream(null);
-    
-    wsRef.current?.send(JSON.stringify({
-      type: "screen-share",
-      roomId,
-      participantId,
-      isSharing: false,
-    }));
-    
+    originalVideoTrackRef.current = null;
+
+    wsRef.current?.send(
+      JSON.stringify({
+        type: "screen-share",
+        roomId,
+        participantId,
+        isSharing: false,
+      })
+    );
+
     toast({
       title: "Screen Sharing Stopped",
-      description: source === 'manual' 
-        ? "You stopped sharing your screen"
-        : "Screen sharing ended",
+      description:
+        source === "manual"
+          ? "You stopped sharing your screen"
+          : "Screen sharing ended",
     });
   };
 
   const toggleScreenShare = async () => {
     if (isScreenSharing) {
-      stopScreenShare('manual');
+      stopScreenShare("manual");
     } else {
       try {
+        // 1. Get screen share stream
         const stream = await navigator.mediaDevices.getDisplayMedia({
-          video: { 
+          video: {
             width: { ideal: 1920 },
             height: { ideal: 1080 },
-            frameRate: { ideal: 30 }
+            frameRate: { ideal: 30 },
           },
           audio: true,
         });
-        
+
+        const screenVideoTrack = stream.getVideoTracks()[0];
+        console.log(`🖥️ Got screen share track: ${screenVideoTrack.id}`);
+
+        // 2. Save original video track if camera is on
+        if (isVideoEnabled && localStream) {
+          const currentVideoTrack = localStream.getVideoTracks()[0];
+          if (currentVideoTrack) {
+            originalVideoTrackRef.current = currentVideoTrack;
+            console.log(`💾 Saved camera track: ${currentVideoTrack.id}`);
+          }
+        }
+
+        // 3. Replace video track in all peer connections
+        peersRef.current.forEach((peer, peerId) => {
+          const videoSender = peer._pc
+            ?.getSenders()
+            .find((s: RTCRtpSender) => s.track?.kind === "video" || !s.track);
+          if (videoSender) {
+            console.log(`🖥️ Replacing with screen track for peer ${peerId}`);
+            videoSender
+              .replaceTrack(screenVideoTrack)
+              .catch((err: Error) =>
+                console.error(
+                  `Failed to replace track for peer ${peerId}:`,
+                  err
+                )
+              );
+          }
+        });
+
+        // 4. Update local stream with screen track (don't create new stream)
+        if (localStream) {
+          // Remove existing video track (camera)
+          const existingVideoTracks = localStream.getVideoTracks();
+          existingVideoTracks.forEach((t) => localStream.removeTrack(t));
+          // Add screen share track
+          localStream.addTrack(screenVideoTrack);
+          console.log(`Added screen share track to localStream`);
+        }
+
+        // 5. Update state
         setScreenStream(stream);
         setIsScreenSharing(true);
         isScreenSharingRef.current = true;
-        
-        wsRef.current?.send(JSON.stringify({
-          type: "screen-share",
-          roomId,
-          participantId,
-          isSharing: true,
-        }));
-        
-        stream.getVideoTracks()[0].onended = () => {
+
+        wsRef.current?.send(
+          JSON.stringify({
+            type: "screen-share",
+            roomId,
+            participantId,
+            isSharing: true,
+          })
+        );
+
+        // 6. Handle browser stop button
+        screenVideoTrack.onended = () => {
           if (isScreenSharingRef.current) {
-            stopScreenShare('browser');
+            stopScreenShare("browser");
           }
         };
-        
+
         toast({
           title: "Screen Sharing Started",
           description: "You are now sharing your screen",
         });
       } catch (error) {
         console.error("Error sharing screen:", error);
-        if ((error as Error).name !== 'NotAllowedError') {
+        if ((error as Error).name !== "NotAllowedError") {
           toast({
             title: "Screen Share Failed",
             description: "Could not start screen sharing",
@@ -1406,42 +1807,50 @@ export default function Room() {
   const toggleHandRaise = () => {
     const newHandRaisedState = !handRaised;
     setHandRaised(newHandRaisedState);
-    
-    wsRef.current?.send(JSON.stringify({
-      type: "raise-hand",
-      roomId,
-      participantId,
-      isRaised: newHandRaisedState,
-    }));
-    
-    setParticipants(prev => prev.map(p => 
-      p.id === participantId ? { ...p, handRaised: newHandRaisedState } : p
-    ));
+
+    wsRef.current?.send(
+      JSON.stringify({
+        type: "raise-hand",
+        roomId,
+        participantId,
+        isRaised: newHandRaisedState,
+      })
+    );
+
+    setParticipants((prev) =>
+      prev.map((p) =>
+        p.id === participantId ? { ...p, handRaised: newHandRaisedState } : p
+      )
+    );
   };
 
   const sendReaction = (emoji: string) => {
-    wsRef.current?.send(JSON.stringify({
-      type: "emoji-reaction",
-      roomId,
-      participantId,
-      participantName,
-      emoji,
-    }));
+    wsRef.current?.send(
+      JSON.stringify({
+        type: "emoji-reaction",
+        roomId,
+        participantId,
+        participantName,
+        emoji,
+      })
+    );
   };
 
   const removeReaction = (id: string) => {
-    setReactions(prev => prev.filter(r => r.id !== id));
+    setReactions((prev) => prev.filter((r) => r.id !== id));
   };
 
   const muteAllParticipants = () => {
     if (!isHost) return;
-    
-    wsRef.current?.send(JSON.stringify({
-      type: "mute-all",
-      roomId,
-      participantId,
-    }));
-    
+
+    wsRef.current?.send(
+      JSON.stringify({
+        type: "mute-all",
+        roomId,
+        participantId,
+      })
+    );
+
     toast({
       title: "Mute All",
       description: "All participants have been muted",
@@ -1450,47 +1859,55 @@ export default function Room() {
 
   const toggleRoomLock = () => {
     if (!isHost) return;
-    
+
     const newLockedState = !isRoomLocked;
-    
-    wsRef.current?.send(JSON.stringify({
-      type: "lock-room",
-      roomId,
-      participantId,
-      isLocked: newLockedState,
-    }));
+
+    wsRef.current?.send(
+      JSON.stringify({
+        type: "lock-room",
+        roomId,
+        participantId,
+        isLocked: newLockedState,
+      })
+    );
   };
 
   const transferHost = (newHostId: string) => {
     if (!isHost) return;
-    
-    wsRef.current?.send(JSON.stringify({
-      type: "transfer-host",
-      roomId,
-      participantId,
-      newHostId,
-    }));
-    
+
+    wsRef.current?.send(
+      JSON.stringify({
+        type: "transfer-host",
+        roomId,
+        participantId,
+        newHostId,
+      })
+    );
+
     setShowTransferHost(false);
   };
 
   const sendMessage = (message: string) => {
-    wsRef.current?.send(JSON.stringify({
-      type: "chat-message",
-      roomId,
-      message,
-      participantId,
-      participantName,
-    }));
+    wsRef.current?.send(
+      JSON.stringify({
+        type: "chat-message",
+        roomId,
+        message,
+        participantId,
+        participantName,
+      })
+    );
   };
 
   const leaveRoom = () => {
-    wsRef.current?.send(JSON.stringify({
-      type: "leave-room",
-      roomId,
-      participantId,
-    }));
-    
+    wsRef.current?.send(
+      JSON.stringify({
+        type: "leave-room",
+        roomId,
+        participantId,
+      })
+    );
+
     clearSavedRoomState();
     cleanup();
     setLocation("/");
@@ -1498,7 +1915,7 @@ export default function Room() {
 
   const handlePresetChange = async (preset: QualityPreset) => {
     setCurrentPreset(preset);
-    
+
     if (preset === "custom") {
       toast({
         title: "Custom Preset",
@@ -1506,22 +1923,24 @@ export default function Room() {
       });
       return;
     }
-    
+
     const presetConfig = QUALITY_PRESETS[preset];
     if (!presetConfig) return;
-    
+
     setVideoQuality(presetConfig.videoQuality);
-    
+
     if (presetConfig.audioSettings && mediaProcessorRef.current) {
       const audioSettings = presetConfig.audioSettings;
       if (audioSettings.gainControl !== undefined) {
         mediaProcessorRef.current.setGain(audioSettings.gainControl);
       }
       if (audioSettings.noiseSuppression !== undefined) {
-        mediaProcessorRef.current.setNoiseSuppressionIntensity(audioSettings.noiseSuppression * 100);
+        mediaProcessorRef.current.setNoiseSuppressionIntensity(
+          audioSettings.noiseSuppression * 100
+        );
       }
     }
-    
+
     if (presetConfig.videoSettings) {
       setVideoSettings({
         brightness: presetConfig.videoSettings.brightness ?? 100,
@@ -1529,7 +1948,7 @@ export default function Room() {
         saturation: presetConfig.videoSettings.saturation ?? 100,
       });
     }
-    
+
     if (localStream && presetConfig.videoConstraints) {
       try {
         const videoTrack = localStream.getVideoTracks()[0];
@@ -1540,7 +1959,7 @@ export default function Room() {
         console.error("Error applying preset video constraints:", err);
       }
     }
-    
+
     toast({
       title: "Preset Applied",
       description: `${presetConfig.name} - ${presetConfig.description}`,
@@ -1550,19 +1969,25 @@ export default function Room() {
   const handleQualityChange = async (quality: VideoQualityLevel) => {
     setVideoQuality(quality);
     setCurrentPreset("custom");
-    
+
     if (!localStream) return;
-    
-    const effectiveQuality = quality === "auto" ? bandwidthStats.recommendedQuality : quality;
-    const constraints = effectiveQuality !== "auto" ? VIDEO_QUALITY_CONSTRAINTS[effectiveQuality] : VIDEO_QUALITY_CONSTRAINTS.medium;
-    
+
+    const effectiveQuality =
+      quality === "auto" ? bandwidthStats.recommendedQuality : quality;
+    const constraints =
+      effectiveQuality !== "auto"
+        ? VIDEO_QUALITY_CONSTRAINTS[effectiveQuality]
+        : VIDEO_QUALITY_CONSTRAINTS.medium;
+
     try {
       const videoTrack = localStream.getVideoTracks()[0];
       if (videoTrack) {
         await videoTrack.applyConstraints(constraints);
         toast({
           title: "Video Quality Updated",
-          description: `Quality set to ${quality}${quality === "auto" ? ` (${effectiveQuality})` : ""}`,
+          description: `Quality set to ${quality}${
+            quality === "auto" ? ` (${effectiveQuality})` : ""
+          }`,
         });
       }
     } catch (err) {
@@ -1597,9 +2022,11 @@ export default function Room() {
   };
 
   const togglePictureInPicture = async () => {
-    const videoElements = document.querySelectorAll('video');
-    const activeVideo = Array.from(videoElements).find(v => v.srcObject && v.readyState >= 2);
-    
+    const videoElements = document.querySelectorAll("video");
+    const activeVideo = Array.from(videoElements).find(
+      (v) => v.srcObject && v.readyState >= 2
+    );
+
     if (!activeVideo) {
       toast({
         title: "Picture-in-Picture Unavailable",
@@ -1626,7 +2053,7 @@ export default function Room() {
   };
 
   const recordingStartTimeRef = useRef<number | null>(null);
-  
+
   useEffect(() => {
     if (isRecording && !recordingStartTimeRef.current) {
       recordingStartTimeRef.current = Date.now();
@@ -1645,17 +2072,17 @@ export default function Room() {
       return;
     }
 
-    const elapsedMs = recordingStartTimeRef.current 
-      ? Date.now() - recordingStartTimeRef.current 
+    const elapsedMs = recordingStartTimeRef.current
+      ? Date.now() - recordingStartTimeRef.current
       : 0;
-    
+
     const marker = {
       timestamp: elapsedMs,
       label: `Chapter ${chapterMarkers.length + 1}`,
     };
-    
-    setChapterMarkers(prev => [...prev, marker]);
-    
+
+    setChapterMarkers((prev) => [...prev, marker]);
+
     toast({
       title: "Chapter Marker Added",
       description: `Marker at ${(elapsedMs / 1000).toFixed(1)}s`,
@@ -1663,16 +2090,16 @@ export default function Room() {
   };
 
   const addShowNote = (noteText: string) => {
-    const elapsedMs = recordingStartTimeRef.current 
-      ? Date.now() - recordingStartTimeRef.current 
+    const elapsedMs = recordingStartTimeRef.current
+      ? Date.now() - recordingStartTimeRef.current
       : 0;
-    
+
     const note = {
       timestamp: elapsedMs,
       note: noteText,
     };
-    
-    setShowNotes(prev => [...prev, note]);
+
+    setShowNotes((prev) => [...prev, note]);
   };
 
   const cleanup = () => {
@@ -1680,17 +2107,17 @@ export default function Room() {
       clearTimeout(reconnectTimeoutRef.current);
       reconnectTimeoutRef.current = null;
     }
-    
-    localStream?.getTracks().forEach(track => track.stop());
-    screenStream?.getTracks().forEach(track => track.stop());
-    processedStream?.getTracks().forEach(track => track.stop());
-    backgroundProcessedStream?.getTracks().forEach(track => track.stop());
-    
-    peersRef.current.forEach(peer => {
+
+    localStream?.getTracks().forEach((track) => track.stop());
+    screenStream?.getTracks().forEach((track) => track.stop());
+    processedStream?.getTracks().forEach((track) => track.stop());
+    backgroundProcessedStream?.getTracks().forEach((track) => track.stop());
+
+    peersRef.current.forEach((peer) => {
       peer.destroy();
     });
     peersRef.current.clear();
-    
+
     mediaProcessorRef.current?.cleanup();
     backgroundProcessorRef.current?.cleanup();
     wsRef.current?.close();
@@ -1700,7 +2127,9 @@ export default function Room() {
     const hrs = Math.floor(seconds / 3600);
     const mins = Math.floor((seconds % 3600) / 60);
     const secs = seconds % 60;
-    return `${hrs.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+    return `${hrs.toString().padStart(2, "0")}:${mins
+      .toString()
+      .padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
   };
 
   const copyRoomLink = async () => {
@@ -1728,27 +2157,80 @@ export default function Room() {
   }
 
   // Filter out current user from pending list - you should never need to approve yourself!
-  const pendingParticipants = participants.filter(p => p.approvalStatus === "pending" && p.id !== participantId);
-  const approvedParticipants = participants.filter(p => p.approvalStatus === "approved");
+  const pendingParticipants = participants.filter(
+    (p) => p.approvalStatus === "pending" && p.id !== participantId
+  );
+  const approvedParticipants = participants.filter(
+    (p) => p.approvalStatus === "approved"
+  );
+
+  // Debug: Log current state on every render
+  console.log(`\n📺 [RENDER] ============================================`);
+  console.log(
+    `📺 [RENDER] Participants: ${participants.length} total, ${approvedParticipants.length} approved`
+  );
+  console.log(`📺 [RENDER] Current participant: ${participantId}`);
+  console.log(
+    `📺 [RENDER] Local stream:`,
+    localStream
+      ? `YES (${
+          localStream.getTracks().length
+        } tracks, id: ${localStream.id.substr(0, 8)}...)`
+      : "NO"
+  );
+  if (localStream) {
+    localStream.getTracks().forEach((t) => {
+      console.log(
+        `  - ${t.kind}: ${t.label} (${t.id.substr(0, 8)}...) enabled=${
+          t.enabled
+        } readyState=${t.readyState}`
+      );
+    });
+  }
+  console.log(`📺 [RENDER] Remote streams: ${remoteStreams.size}`);
+  remoteStreams.forEach((stream, id) => {
+    console.log(`  - ${id}: ${stream.getTracks().length} tracks`);
+  });
+  console.log(
+    `📺 [RENDER] isAudioEnabled: ${isAudioEnabled}, isVideoEnabled: ${isVideoEnabled}`
+  );
 
   return (
-    <div ref={roomContainerRef} className="h-screen flex flex-col bg-background">
+    <div
+      ref={roomContainerRef}
+      className="h-screen flex flex-col bg-background"
+    >
       <header className="h-16 border-b flex items-center justify-between px-6">
         <div className="flex items-center gap-4">
-          <h1 className="text-xl font-semibold" data-testid="text-room-name">Room: {roomId}</h1>
-          <span className="text-sm text-muted-foreground font-mono" data-testid="text-duration">
+          <h1 className="text-xl font-semibold" data-testid="text-room-name">
+            Room: {roomId}
+          </h1>
+          <span
+            className="text-sm text-muted-foreground font-mono"
+            data-testid="text-duration"
+          >
             {formatDuration(duration)}
           </span>
           {isRecording && (
             <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-destructive/10 border border-destructive">
               <Radio className="h-3 w-3 text-destructive animate-pulse" />
-              <span className="text-xs font-medium text-destructive" data-testid="text-recording-indicator">REC</span>
+              <span
+                className="text-xs font-medium text-destructive"
+                data-testid="text-recording-indicator"
+              >
+                REC
+              </span>
             </div>
           )}
           {isReconnecting && (
             <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-yellow-500/10 border border-yellow-500">
               <div className="h-2 w-2 rounded-full bg-yellow-500 animate-pulse" />
-              <span className="text-xs font-medium text-yellow-600 dark:text-yellow-500" data-testid="text-reconnecting-indicator">Reconnecting...</span>
+              <span
+                className="text-xs font-medium text-yellow-600 dark:text-yellow-500"
+                data-testid="text-reconnecting-indicator"
+              >
+                Reconnecting...
+              </span>
             </div>
           )}
           {!isReconnecting && participants.length > 1 && (
@@ -1766,20 +2248,31 @@ export default function Room() {
             className="gap-2"
             data-testid="button-copy-link"
           >
-            {linkCopied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+            {linkCopied ? (
+              <Check className="w-4 h-4" />
+            ) : (
+              <Copy className="w-4 h-4" />
+            )}
             {linkCopied ? "Copied!" : "Copy Link"}
           </Button>
         </div>
-        
+
         <div className="flex items-center gap-4">
           {isRecording && (
-            <div className="flex items-center gap-2 text-destructive" data-testid="indicator-recording">
+            <div
+              className="flex items-center gap-2 text-destructive"
+              data-testid="indicator-recording"
+            >
               <Radio className="w-4 h-4 animate-pulse-recording" />
               <span className="text-sm font-medium">Recording</span>
             </div>
           )}
-          <span className="text-sm text-muted-foreground" data-testid="text-participant-count">
-            {participants.length} participant{participants.length !== 1 ? 's' : ''}
+          <span
+            className="text-sm text-muted-foreground"
+            data-testid="text-participant-count"
+          >
+            {participants.length} participant
+            {participants.length !== 1 ? "s" : ""}
           </span>
         </div>
       </header>
@@ -1789,7 +2282,7 @@ export default function Room() {
           <div className="flex-1 p-4 overflow-auto">
             <VideoGrid
               participants={approvedParticipants}
-              localStream={backgroundProcessedStream || processedStream || localStream}
+              localStream={localStream}
               screenStream={screenStream}
               currentParticipantId={participantId}
               videoSettings={videoSettings}
@@ -1798,17 +2291,22 @@ export default function Room() {
               peers={peersRef.current}
               viewMode={viewMode}
               pinnedParticipantId={pinnedParticipantId}
-              onTogglePin={(id) => setPinnedParticipantId(prev => prev === id ? null : id)}
+              onTogglePin={(id) =>
+                setPinnedParticipantId((prev) => (prev === id ? null : id))
+              }
               spotlightedParticipantId={spotlightedParticipantId}
               gridColumns={gridColumns}
               onToggleSpotlight={(id) => {
                 if (!isHost) return;
-                wsRef.current?.send(JSON.stringify({
-                  type: "spotlight-participant",
-                  roomId,
-                  participantId,
-                  targetParticipantId: spotlightedParticipantId === id ? null : id,
-                }));
+                wsRef.current?.send(
+                  JSON.stringify({
+                    type: "spotlight-participant",
+                    roomId,
+                    participantId,
+                    targetParticipantId:
+                      spotlightedParticipantId === id ? null : id,
+                  })
+                );
               }}
               isHost={isHost}
             />
@@ -1823,7 +2321,11 @@ export default function Room() {
                 className="rounded-full w-12 h-12"
                 data-testid="button-toggle-audio"
               >
-                {isAudioEnabled ? <Mic className="w-5 h-5" /> : <MicOff className="w-5 h-5" />}
+                {isAudioEnabled ? (
+                  <Mic className="w-5 h-5" />
+                ) : (
+                  <MicOff className="w-5 h-5" />
+                )}
               </Button>
 
               <Button
@@ -1833,7 +2335,11 @@ export default function Room() {
                 className="rounded-full w-12 h-12"
                 data-testid="button-toggle-video"
               >
-                {isVideoEnabled ? <Video className="w-5 h-5" /> : <VideoOff className="w-5 h-5" />}
+                {isVideoEnabled ? (
+                  <Video className="w-5 h-5" />
+                ) : (
+                  <VideoOff className="w-5 h-5" />
+                )}
               </Button>
 
               <Button
@@ -1843,7 +2349,11 @@ export default function Room() {
                 className="rounded-full w-12 h-12"
                 data-testid="button-toggle-screen"
               >
-                {isScreenSharing ? <MonitorOff className="w-5 h-5" /> : <Monitor className="w-5 h-5" />}
+                {isScreenSharing ? (
+                  <MonitorOff className="w-5 h-5" />
+                ) : (
+                  <Monitor className="w-5 h-5" />
+                )}
               </Button>
 
               <Button
@@ -1868,19 +2378,31 @@ export default function Room() {
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent>
-                  <DropdownMenuItem onClick={() => sendReaction("👍")} data-testid="reaction-thumbs-up">
+                  <DropdownMenuItem
+                    onClick={() => sendReaction("👍")}
+                    data-testid="reaction-thumbs-up"
+                  >
                     <span className="text-2xl">👍</span>
                     <span className="ml-2">Thumbs Up</span>
                   </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => sendReaction("❤️")} data-testid="reaction-heart">
+                  <DropdownMenuItem
+                    onClick={() => sendReaction("❤️")}
+                    data-testid="reaction-heart"
+                  >
                     <span className="text-2xl">❤️</span>
                     <span className="ml-2">Heart</span>
                   </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => sendReaction("👏")} data-testid="reaction-clap">
+                  <DropdownMenuItem
+                    onClick={() => sendReaction("👏")}
+                    data-testid="reaction-clap"
+                  >
                     <span className="text-2xl">👏</span>
                     <span className="ml-2">Clap</span>
                   </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => sendReaction("😂")} data-testid="reaction-laugh">
+                  <DropdownMenuItem
+                    onClick={() => sendReaction("😂")}
+                    data-testid="reaction-laugh"
+                  >
                     <span className="text-2xl">😂</span>
                     <span className="ml-2">Laugh</span>
                   </DropdownMenuItem>
@@ -1895,14 +2417,15 @@ export default function Room() {
                   if (!isRecording && !canRecord) {
                     toast({
                       title: "Recording Permission Required",
-                      description: "You don't have permission to record. Ask the host to grant permission.",
+                      description:
+                        "You don't have permission to record. Ask the host to grant permission.",
                       variant: "destructive",
                     });
                     return;
                   }
                   setIsRecording(!isRecording);
                 }}
-                localStream={processedStream || localStream}
+                localStream={localStream}
                 onCountdownChange={setRecordingCountdown}
                 remoteStreams={remoteStreams}
                 participants={participants}
@@ -1911,7 +2434,7 @@ export default function Room() {
 
               {isRecording && (
                 <AudioWaveform
-                  stream={processedStream || localStream}
+                  stream={localStream}
                   width={200}
                   height={40}
                   className="mx-2"
@@ -1943,12 +2466,22 @@ export default function Room() {
               <Button
                 size="icon"
                 variant={viewMode === "speaker" ? "default" : "secondary"}
-                onClick={() => setViewMode(viewMode === "grid" ? "speaker" : "grid")}
+                onClick={() =>
+                  setViewMode(viewMode === "grid" ? "speaker" : "grid")
+                }
                 className="rounded-full w-12 h-12"
                 data-testid="button-toggle-view"
-                title={viewMode === "grid" ? "Switch to Speaker View" : "Switch to Grid View"}
+                title={
+                  viewMode === "grid"
+                    ? "Switch to Speaker View"
+                    : "Switch to Grid View"
+                }
               >
-                {viewMode === "grid" ? <UserCircle className="w-5 h-5" /> : <Grid3x3 className="w-5 h-5" />}
+                {viewMode === "grid" ? (
+                  <UserCircle className="w-5 h-5" />
+                ) : (
+                  <Grid3x3 className="w-5 h-5" />
+                )}
               </Button>
 
               <Button
@@ -1957,9 +2490,15 @@ export default function Room() {
                 onClick={toggleFullscreen}
                 className="rounded-full w-12 h-12"
                 data-testid="button-toggle-fullscreen"
-                title={isFullscreen ? "Exit Fullscreen (F)" : "Enter Fullscreen (F)"}
+                title={
+                  isFullscreen ? "Exit Fullscreen (F)" : "Enter Fullscreen (F)"
+                }
               >
-                {isFullscreen ? <Minimize className="w-5 h-5" /> : <Maximize className="w-5 h-5" />}
+                {isFullscreen ? (
+                  <Minimize className="w-5 h-5" />
+                ) : (
+                  <Maximize className="w-5 h-5" />
+                )}
               </Button>
 
               <Button
@@ -1975,7 +2514,9 @@ export default function Room() {
               <Button
                 size="icon"
                 variant={showBackgroundControls ? "default" : "secondary"}
-                onClick={() => setShowBackgroundControls(!showBackgroundControls)}
+                onClick={() =>
+                  setShowBackgroundControls(!showBackgroundControls)
+                }
                 className="rounded-full w-12 h-12"
                 data-testid="button-toggle-background"
                 title="Background Effects"
@@ -2040,22 +2581,28 @@ export default function Room() {
                   data-testid="button-toggle-lock"
                   title={isRoomLocked ? "Unlock Room" : "Lock Room"}
                 >
-                  {isRoomLocked ? <Lock className="w-5 h-5" /> : <LockOpen className="w-5 h-5" />}
+                  {isRoomLocked ? (
+                    <Lock className="w-5 h-5" />
+                  ) : (
+                    <LockOpen className="w-5 h-5" />
+                  )}
                 </Button>
               )}
 
-              {isHost && approvedParticipants.filter(p => p.id !== participantId).length > 0 && (
-                <Button
-                  size="icon"
-                  variant="secondary"
-                  onClick={() => setShowTransferHost(true)}
-                  className="rounded-full w-12 h-12"
-                  data-testid="button-transfer-host"
-                  title="Transfer Host"
-                >
-                  <ArrowRightLeft className="w-5 h-5" />
-                </Button>
-              )}
+              {isHost &&
+                approvedParticipants.filter((p) => p.id !== participantId)
+                  .length > 0 && (
+                  <Button
+                    size="icon"
+                    variant="secondary"
+                    onClick={() => setShowTransferHost(true)}
+                    className="rounded-full w-12 h-12"
+                    data-testid="button-transfer-host"
+                    title="Transfer Host"
+                  >
+                    <ArrowRightLeft className="w-5 h-5" />
+                  </Button>
+                )}
 
               <div className="w-px h-8 bg-border mx-2" />
 
@@ -2103,7 +2650,9 @@ export default function Room() {
           open={showBackgroundControls}
           onOpenChange={setShowBackgroundControls}
           settings={backgroundSettings}
-          onSettingsChange={(settings) => setBackgroundSettings(prev => ({ ...prev, ...settings }))}
+          onSettingsChange={(settings) =>
+            setBackgroundSettings((prev) => ({ ...prev, ...settings }))
+          }
           isProcessing={isBackgroundProcessing}
         />
 
@@ -2112,12 +2661,14 @@ export default function Room() {
             onClose={() => setShowFileSharing(false)}
             participantName={participantName}
             onFileShare={(file) => {
-              setSharedFiles(prev => [...prev, file]);
-              wsRef.current?.send(JSON.stringify({
-                type: "file-share",
-                roomId,
-                file,
-              }));
+              setSharedFiles((prev) => [...prev, file]);
+              wsRef.current?.send(
+                JSON.stringify({
+                  type: "file-share",
+                  roomId,
+                  file,
+                })
+              );
             }}
             sharedFiles={sharedFiles}
           />
@@ -2139,7 +2690,10 @@ export default function Room() {
 
         {recordingCountdown !== null && (
           <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 pointer-events-none">
-            <div className="text-9xl font-bold text-white animate-pulse" data-testid="countdown-overlay">
+            <div
+              className="text-9xl font-bold text-white animate-pulse"
+              data-testid="countdown-overlay"
+            >
               {recordingCountdown}
             </div>
           </div>
@@ -2150,13 +2704,14 @@ export default function Room() {
             <DialogHeader>
               <DialogTitle>Transfer Host</DialogTitle>
               <DialogDescription>
-                Select a participant to transfer host role to. This will grant them full control of the room.
+                Select a participant to transfer host role to. This will grant
+                them full control of the room.
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-2">
               {approvedParticipants
-                .filter(p => p.id !== participantId)
-                .map(participant => (
+                .filter((p) => p.id !== participantId)
+                .map((participant) => (
                   <Button
                     key={participant.id}
                     variant="outline"
