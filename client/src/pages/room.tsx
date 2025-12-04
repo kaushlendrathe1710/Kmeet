@@ -1871,8 +1871,8 @@ export default function Room() {
       </header>
 
       <div className="flex-1 flex overflow-hidden">
-        <div className="flex-1 flex flex-col">
-          <div className="flex-1 p-4 overflow-auto">
+        <div className="flex-1 flex flex-col min-w-0">
+          <div className="flex-1 overflow-hidden">
             <VideoGrid
               participants={approvedParticipants}
               localStream={backgroundProcessedStream || processedStream || localStream}
