@@ -1900,46 +1900,46 @@ export default function Room() {
             />
           </div>
 
-          <div className="h-20 border-t bg-card/50 backdrop-blur-sm flex items-center justify-center px-6">
-            <div className="flex items-center gap-2">
+          <div className="h-16 border-t bg-card/50 backdrop-blur-sm flex items-center justify-center px-4">
+            <div className="flex items-center gap-1 flex-wrap justify-center">
               <Button
                 size="icon"
                 variant={isAudioEnabled ? "default" : "destructive"}
                 onClick={toggleAudio}
-                className="rounded-full w-12 h-12"
+                className="rounded-full w-10 h-10"
                 data-testid="button-toggle-audio"
               >
-                {isAudioEnabled ? <Mic className="w-5 h-5" /> : <MicOff className="w-5 h-5" />}
+                {isAudioEnabled ? <Mic className="w-4 h-4" /> : <MicOff className="w-4 h-4" />}
               </Button>
 
               <Button
                 size="icon"
                 variant={isVideoEnabled ? "default" : "destructive"}
                 onClick={toggleVideo}
-                className="rounded-full w-12 h-12"
+                className="rounded-full w-10 h-10"
                 data-testid="button-toggle-video"
               >
-                {isVideoEnabled ? <Video className="w-5 h-5" /> : <VideoOff className="w-5 h-5" />}
+                {isVideoEnabled ? <Video className="w-4 h-4" /> : <VideoOff className="w-4 h-4" />}
               </Button>
 
               <Button
                 size="icon"
                 variant={isScreenSharing ? "default" : "secondary"}
                 onClick={toggleScreenShare}
-                className="rounded-full w-12 h-12"
+                className="rounded-full w-10 h-10"
                 data-testid="button-toggle-screen"
               >
-                {isScreenSharing ? <MonitorOff className="w-5 h-5" /> : <Monitor className="w-5 h-5" />}
+                {isScreenSharing ? <MonitorOff className="w-4 h-4" /> : <Monitor className="w-4 h-4" />}
               </Button>
 
               <Button
                 size="icon"
                 variant={handRaised ? "default" : "secondary"}
                 onClick={toggleHandRaise}
-                className="rounded-full w-12 h-12"
+                className="rounded-full w-10 h-10"
                 data-testid="button-raise-hand"
               >
-                <Hand className="w-5 h-5" />
+                <Hand className="w-4 h-4" />
               </Button>
 
               <DropdownMenu>
@@ -1947,10 +1947,10 @@ export default function Room() {
                   <Button
                     size="icon"
                     variant="secondary"
-                    className="rounded-full w-12 h-12"
+                    className="rounded-full w-10 h-10"
                     data-testid="button-reactions"
                   >
-                    <Smile className="w-5 h-5" />
+                    <Smile className="w-4 h-4" />
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent>
@@ -2010,53 +2010,53 @@ export default function Room() {
                 size="icon"
                 variant={showChat ? "default" : "secondary"}
                 onClick={() => setShowChat(!showChat)}
-                className="rounded-full w-12 h-12"
+                className="rounded-full w-10 h-10"
                 data-testid="button-toggle-chat"
               >
-                <MessageSquare className="w-5 h-5" />
+                <MessageSquare className="w-4 h-4" />
               </Button>
 
               <Button
                 size="icon"
                 variant={showParticipants ? "default" : "secondary"}
                 onClick={() => setShowParticipants(!showParticipants)}
-                className="rounded-full w-12 h-12"
+                className="rounded-full w-10 h-10"
                 data-testid="button-toggle-participants"
               >
-                <Users className="w-5 h-5" />
+                <Users className="w-4 h-4" />
               </Button>
 
               {/* View Mode Toggle - cycles through grid -> speaker -> self */}
-              <div className="flex gap-1 bg-muted rounded-full p-1">
+              <div className="flex gap-0.5 bg-muted rounded-full p-0.5">
                 <Button
                   size="icon"
                   variant={viewMode === "grid" ? "default" : "ghost"}
                   onClick={() => setViewMode("grid")}
-                  className="rounded-full w-10 h-10"
+                  className="rounded-full w-8 h-8"
                   data-testid="button-view-grid"
                   title="Equal Grid View (G)"
                 >
-                  <LayoutGrid className="w-4 h-4" />
+                  <LayoutGrid className="w-3.5 h-3.5" />
                 </Button>
                 <Button
                   size="icon"
                   variant={viewMode === "speaker" ? "default" : "ghost"}
                   onClick={() => setViewMode("speaker")}
-                  className="rounded-full w-10 h-10"
+                  className="rounded-full w-8 h-8"
                   data-testid="button-view-speaker"
                   title="Speaker View (B)"
                 >
-                  <UserCircle className="w-4 h-4" />
+                  <UserCircle className="w-3.5 h-3.5" />
                 </Button>
                 <Button
                   size="icon"
                   variant={viewMode === "self" ? "default" : "ghost"}
                   onClick={() => setViewMode("self")}
-                  className="rounded-full w-10 h-10"
+                  className="rounded-full w-8 h-8"
                   data-testid="button-view-self"
                   title="Self View Only (L)"
                 >
-                  <User className="w-4 h-4" />
+                  <User className="w-3.5 h-3.5" />
                 </Button>
               </div>
 
@@ -2064,43 +2064,43 @@ export default function Room() {
                 size="icon"
                 variant={isFullscreen ? "default" : "secondary"}
                 onClick={toggleFullscreen}
-                className="rounded-full w-12 h-12"
+                className="rounded-full w-10 h-10"
                 data-testid="button-toggle-fullscreen"
                 title={isFullscreen ? "Exit Fullscreen (F)" : "Enter Fullscreen (F)"}
               >
-                {isFullscreen ? <Minimize className="w-5 h-5" /> : <Maximize className="w-5 h-5" />}
+                {isFullscreen ? <Minimize className="w-4 h-4" /> : <Maximize className="w-4 h-4" />}
               </Button>
 
               <Button
                 size="icon"
                 variant={showSettings ? "default" : "secondary"}
                 onClick={() => setShowSettings(!showSettings)}
-                className="rounded-full w-12 h-12"
+                className="rounded-full w-10 h-10"
                 data-testid="button-toggle-settings"
               >
-                <Settings className="w-5 h-5" />
+                <Settings className="w-4 h-4" />
               </Button>
 
               <Button
                 size="icon"
                 variant={showBackgroundControls ? "default" : "secondary"}
                 onClick={() => setShowBackgroundControls(!showBackgroundControls)}
-                className="rounded-full w-12 h-12"
+                className="rounded-full w-10 h-10"
                 data-testid="button-toggle-background"
                 title="Background Effects"
               >
-                <Wand2 className="w-5 h-5" />
+                <Wand2 className="w-4 h-4" />
               </Button>
 
               <Button
                 size="icon"
                 variant={showFileSharing ? "default" : "secondary"}
                 onClick={() => setShowFileSharing(!showFileSharing)}
-                className="rounded-full w-12 h-12"
+                className="rounded-full w-10 h-10"
                 data-testid="button-toggle-files"
                 title="File Sharing"
               >
-                <FileUp className="w-5 h-5" />
+                <FileUp className="w-4 h-4" />
               </Button>
 
               <div className="rounded-full overflow-hidden">
@@ -2123,15 +2123,15 @@ export default function Room() {
                     size="icon"
                     variant={showJoinRequests ? "default" : "secondary"}
                     onClick={() => setShowJoinRequests(!showJoinRequests)}
-                    className="rounded-full w-12 h-12"
+                    className="rounded-full w-10 h-10"
                     data-testid="button-toggle-requests"
                   >
-                    <UserPlus className="w-5 h-5" />
+                    <UserPlus className="w-4 h-4" />
                   </Button>
                   {pendingParticipants.length > 0 && (
                     <Badge
                       variant="destructive"
-                      className="absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center p-0 text-xs"
+                      className="absolute -top-1 -right-1 h-4 w-4 flex items-center justify-center p-0 text-xs"
                       data-testid="badge-pending-count"
                     >
                       {pendingParticipants.length}
@@ -2145,11 +2145,11 @@ export default function Room() {
                   size="icon"
                   variant={isRoomLocked ? "default" : "secondary"}
                   onClick={toggleRoomLock}
-                  className="rounded-full w-12 h-12"
+                  className="rounded-full w-10 h-10"
                   data-testid="button-toggle-lock"
                   title={isRoomLocked ? "Unlock Room" : "Lock Room"}
                 >
-                  {isRoomLocked ? <Lock className="w-5 h-5" /> : <LockOpen className="w-5 h-5" />}
+                  {isRoomLocked ? <Lock className="w-4 h-4" /> : <LockOpen className="w-4 h-4" />}
                 </Button>
               )}
 
@@ -2158,24 +2158,24 @@ export default function Room() {
                   size="icon"
                   variant="secondary"
                   onClick={() => setShowTransferHost(true)}
-                  className="rounded-full w-12 h-12"
+                  className="rounded-full w-10 h-10"
                   data-testid="button-transfer-host"
                   title="Transfer Host"
                 >
-                  <ArrowRightLeft className="w-5 h-5" />
+                  <ArrowRightLeft className="w-4 h-4" />
                 </Button>
               )}
 
-              <div className="w-px h-8 bg-border mx-2" />
+              <div className="w-px h-6 bg-border mx-1" />
 
               <Button
                 size="icon"
                 variant="destructive"
                 onClick={leaveRoom}
-                className="rounded-full w-12 h-12"
+                className="rounded-full w-10 h-10"
                 data-testid="button-leave-room"
               >
-                <Phone className="w-5 h-5" />
+                <Phone className="w-4 h-4" />
               </Button>
             </div>
           </div>

@@ -127,8 +127,16 @@ export function VideoGrid({ participants, localStream, screenStream, currentPart
 
   // Render grid view - equal division podcast layout
   if (viewMode === "grid") {
+    const count = visibleParticipants.length + (screenStream ? 1 : 0);
+    // Calculate rows needed for proper layout
+    const rows = count <= 3 ? 1 : count <= 6 ? 2 : count <= 9 ? 3 : Math.ceil(count / 4);
+    
     return (
-      <div className={`grid ${getGridClass()} gap-1 h-full w-full`} data-testid="video-grid">
+      <div 
+        className={`grid ${getGridClass()} gap-1 h-full w-full`}
+        style={{ gridTemplateRows: `repeat(${rows}, 1fr)` }}
+        data-testid="video-grid"
+      >
         {screenStream && (
           <VideoTile
             participant={{ id: "screen", name: "Screen Share", roomId: "", isAudioEnabled: false, isVideoEnabled: true, isScreenSharing: true, isHost: false, approvalStatus: "approved", handRaised: false, canRecord: false, joinedAt: Date.now() }}
