@@ -52,13 +52,13 @@ export function VideoGrid({ participants, localStream, screenStream, currentPart
   const getGridClass = () => {
     const count = visibleParticipants.length + (screenStream ? 1 : 0);
     
-    // Equal division podcast-style layout based on participant count
-    if (count === 1) return "grid-cols-1 grid-rows-1";
-    if (count === 2) return "grid-cols-2 grid-rows-1";
-    if (count === 3) return "grid-cols-3 grid-rows-1";
-    if (count === 4) return "grid-cols-2 grid-rows-2";
-    if (count <= 6) return "grid-cols-3 grid-rows-2";
-    if (count <= 9) return "grid-cols-3 grid-rows-3";
+    // Equal division podcast-style layout - use auto-rows-fr to fill full height
+    if (count === 1) return "grid-cols-1 auto-rows-fr";
+    if (count === 2) return "grid-cols-2 auto-rows-fr";
+    if (count === 3) return "grid-cols-3 auto-rows-fr";
+    if (count === 4) return "grid-cols-2 auto-rows-fr";
+    if (count <= 6) return "grid-cols-3 auto-rows-fr";
+    if (count <= 9) return "grid-cols-3 auto-rows-fr";
     return "grid-cols-4 auto-rows-fr";
   };
 
@@ -248,7 +248,7 @@ function VideoTile({ participant, stream, isSelf, videoSettings, isActiveSpeaker
 
   return (
     <div 
-      className={`relative aspect-video bg-muted rounded-lg overflow-hidden border ${
+      className={`relative h-full w-full bg-muted rounded-lg overflow-hidden border ${
         isSpotlighted
           ? "border-4 border-yellow-500 shadow-2xl shadow-yellow-500/70 ring-2 ring-yellow-400" 
           : isActiveSpeaker 
