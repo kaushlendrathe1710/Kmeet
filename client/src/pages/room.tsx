@@ -362,14 +362,42 @@ export default function Room() {
 
   const initializeMedia = async () => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { width: 1920, height: 1080 },
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          sampleRate: 48000,
-        },
-      });
+      // Detect if mobile device
+      const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+      console.log(`[Media] Initializing media, mobile: ${isMobile}`);
+      
+      // Mobile-friendly video constraints with fallback
+      const videoConstraints = isMobile 
+        ? { 
+            facingMode: "user",
+            width: { ideal: 1280, max: 1920 },
+            height: { ideal: 720, max: 1080 },
+          }
+        : { 
+            width: { ideal: 1920, max: 1920 },
+            height: { ideal: 1080, max: 1080 },
+          };
+      
+      let stream: MediaStream;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: videoConstraints,
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true,
+          },
+        });
+        console.log("[Media] ✅ Got media stream with preferred settings");
+      } catch (preferredError) {
+        console.warn("[Media] Preferred settings failed, trying basic constraints:", preferredError);
+        // Fallback to basic constraints
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: true,
+          audio: true,
+        });
+        console.log("[Media] ✅ Got media stream with basic settings");
+      }
       
       mediaProcessorRef.current = new MediaProcessor();
       const enhanced = mediaProcessorRef.current.initializeAudioProcessing(stream);
@@ -467,60 +495,46 @@ export default function Room() {
   // Fetch dynamic TURN credentials on mount
   useEffect(() => {
     const fetchTurnCredentials = async () => {
-      console.log("[WebRTC] Fetching dynamic TURN credentials...");
+      console.log("[WebRTC] Setting up ICE servers with TURN support...");
       
-      // Base STUN servers (always available)
-      const baseServers: RTCIceServer[] = [
+      // Use reliable public TURN servers that are known to work
+      // Metered.ca provides free TURN servers for testing
+      const reliableServers: RTCIceServer[] = [
+        // STUN servers
         { urls: "stun:stun.l.google.com:19302" },
         { urls: "stun:stun1.l.google.com:19302" },
         { urls: "stun:stun2.l.google.com:19302" },
-        { urls: "stun:stun.cloudflare.com:3478" },
-      ];
-      
-      try {
-        // Try Cloudflare TURN credentials (no API key needed, free)
-        const response = await fetch("https://speed.cloudflare.com/turn-creds");
-        if (response.ok) {
-          const data = await response.json();
-          if (data.iceServers && Array.isArray(data.iceServers)) {
-            const servers = [...baseServers, ...data.iceServers];
-            console.log("[WebRTC] ✅ Got Cloudflare TURN credentials:", data.iceServers.length, "servers");
-            console.log("[WebRTC] TURN URLs:", data.iceServers.map((s: any) => s.urls).flat());
-            setIceServers(servers);
-            iceServersRef.current = servers;
-            setIceServersReady(true);
-            iceServersReadyRef.current = true;
-            return;
-          }
-        }
-      } catch (error) {
-        console.warn("[WebRTC] Failed to fetch Cloudflare TURN:", error);
-      }
-      
-      // Fallback: Use static TURN servers with multiple options
-      console.log("[WebRTC] Using fallback static TURN servers");
-      const fallbackServers: RTCIceServer[] = [
-        ...baseServers,
-        // OpenRelay TURN on multiple ports
+        { urls: "stun:stun3.l.google.com:19302" },
+        { urls: "stun:stun4.l.google.com:19302" },
+        // Metered TURN servers (free tier, reliable)
+        {
+          urls: [
+            "turn:a.relay.metered.ca:80",
+            "turn:a.relay.metered.ca:80?transport=tcp",
+            "turn:a.relay.metered.ca:443",
+            "turn:a.relay.metered.ca:443?transport=tcp",
+            "turns:a.relay.metered.ca:443",
+          ],
+          username: "83eebabf8b4cce9d5dbcb649",
+          credential: "2D7JvfxOQtBdYW3R",
+        },
+        // OpenRelay TURN (backup)
         {
           urls: [
             "turn:openrelay.metered.ca:80",
             "turn:openrelay.metered.ca:443",
             "turn:openrelay.metered.ca:443?transport=tcp",
-            "turns:openrelay.metered.ca:443?transport=tcp",
           ],
           username: "openrelayproject",
           credential: "openrelayproject",
         },
-        // Additional public TURN servers
-        {
-          urls: "turn:relay.metered.ca:80",
-          username: "e8dd65b92cce8c4a93ef272e",
-          credential: "kHBPudMlT+hGfA0u",
-        },
       ];
-      setIceServers(fallbackServers);
-      iceServersRef.current = fallbackServers;
+      
+      console.log("[WebRTC] ✅ ICE servers configured with", reliableServers.length, "entries");
+      console.log("[WebRTC] TURN servers included for cross-network connectivity");
+      
+      setIceServers(reliableServers);
+      iceServersRef.current = reliableServers;
       setIceServersReady(true);
       iceServersReadyRef.current = true;
     };

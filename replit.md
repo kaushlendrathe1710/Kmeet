@@ -181,7 +181,12 @@ Key features include:
   - Connections requested before TURN is ready are queued and processed once ready
   - Queue only drains when both ICE servers and media stream are available
   - Prevents STUN-only connections that fail across networks
-- **Dynamic TURN Server Credentials**: Fetches fresh TURN credentials from Cloudflare (speed.cloudflare.com/turn-creds) on room mount, with fallback to static TURN servers for cross-network connectivity
+- **Reliable TURN Servers**: Uses Metered.ca TURN servers (free tier) with multiple fallback options on ports 80, 443, and TCP variants for maximum compatibility
+- **Mobile Camera Support**: 
+  - Added mobile device detection for camera initialization
+  - Uses front-facing camera ("user" mode) on mobile
+  - Flexible resolution constraints with fallback to basic settings
+  - Better error handling for device-specific camera limitations
 - **ICE Connection Retry Logic**: 
   - Automatic retry on failed connections (up to 3 attempts)
   - Initiator-only retries prevent both-sides racing
