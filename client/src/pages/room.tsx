@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { useRoute, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Mic, MicOff, Video, VideoOff, Monitor, MonitorOff, MessageSquare, Users, Settings, Phone, Radio, Copy, Check, UserPlus, Hand, Smile, Grid3x3, UserCircle, Lock, LockOpen, ArrowRightLeft, Maximize, Minimize, Wand2, FileUp } from "lucide-react";
+import { Mic, MicOff, Video, VideoOff, Monitor, MonitorOff, MessageSquare, Users, Settings, Phone, Radio, Copy, Check, UserPlus, Hand, Smile, Grid3x3, UserCircle, Lock, LockOpen, ArrowRightLeft, Maximize, Minimize, Wand2, FileUp, User, LayoutGrid } from "lucide-react";
 import { VideoGrid, type ViewMode } from "@/components/video-grid";
 import { ChatPanel } from "@/components/chat-panel";
 import { ParticipantsPanel } from "@/components/participants-panel";
@@ -64,7 +64,7 @@ export default function Room() {
   const [reactions, setReactions] = useState<Array<{ id: string; emoji: string }>>([]);
   const [recordingCountdown, setRecordingCountdown] = useState<number | null>(null);
   const [hideSelfView, setHideSelfView] = useState(false);
-  const [viewMode, setViewMode] = useState<"grid" | "speaker">("grid");
+  const [viewMode, setViewMode] = useState<"grid" | "speaker" | "self">("grid");
   const [pinnedParticipantId, setPinnedParticipantId] = useState<string | null>(null);
   const [spotlightedParticipantId, setSpotlightedParticipantId] = useState<string | null>(null);
   const [isRoomLocked, setIsRoomLocked] = useState(false);
@@ -182,7 +182,7 @@ export default function Room() {
       if (recoveredState.isVideoEnabled !== undefined) setIsVideoEnabled(recoveredState.isVideoEnabled);
       if (recoveredState.videoQuality) setVideoQuality(recoveredState.videoQuality as VideoQualityLevel);
       if (recoveredState.currentPreset) setCurrentPreset(recoveredState.currentPreset as QualityPreset);
-      if (recoveredState.viewMode) setViewMode(recoveredState.viewMode as "grid" | "speaker");
+      if (recoveredState.viewMode) setViewMode(recoveredState.viewMode as "grid" | "speaker" | "self");
       if (recoveredState.hideSelfView !== undefined) setHideSelfView(recoveredState.hideSelfView);
       if (recoveredState.gridColumns) setGridColumns(recoveredState.gridColumns as 2 | 3 | 4);
       if (recoveredState.videoSettings) setVideoSettings(recoveredState.videoSettings);
@@ -298,6 +298,15 @@ export default function Room() {
           break;
         case 'k':
           addChapterMarker();
+          break;
+        case 'g':
+          setViewMode("grid");
+          break;
+        case 'b':
+          setViewMode("speaker");
+          break;
+        case 'l':
+          setViewMode("self");
           break;
       }
     };
@@ -2017,16 +2026,39 @@ export default function Room() {
                 <Users className="w-5 h-5" />
               </Button>
 
-              <Button
-                size="icon"
-                variant={viewMode === "speaker" ? "default" : "secondary"}
-                onClick={() => setViewMode(viewMode === "grid" ? "speaker" : "grid")}
-                className="rounded-full w-12 h-12"
-                data-testid="button-toggle-view"
-                title={viewMode === "grid" ? "Switch to Speaker View" : "Switch to Grid View"}
-              >
-                {viewMode === "grid" ? <UserCircle className="w-5 h-5" /> : <Grid3x3 className="w-5 h-5" />}
-              </Button>
+              {/* View Mode Toggle - cycles through grid -> speaker -> self */}
+              <div className="flex gap-1 bg-muted rounded-full p-1">
+                <Button
+                  size="icon"
+                  variant={viewMode === "grid" ? "default" : "ghost"}
+                  onClick={() => setViewMode("grid")}
+                  className="rounded-full w-10 h-10"
+                  data-testid="button-view-grid"
+                  title="Equal Grid View (G)"
+                >
+                  <LayoutGrid className="w-4 h-4" />
+                </Button>
+                <Button
+                  size="icon"
+                  variant={viewMode === "speaker" ? "default" : "ghost"}
+                  onClick={() => setViewMode("speaker")}
+                  className="rounded-full w-10 h-10"
+                  data-testid="button-view-speaker"
+                  title="Speaker View (B)"
+                >
+                  <UserCircle className="w-4 h-4" />
+                </Button>
+                <Button
+                  size="icon"
+                  variant={viewMode === "self" ? "default" : "ghost"}
+                  onClick={() => setViewMode("self")}
+                  className="rounded-full w-10 h-10"
+                  data-testid="button-view-self"
+                  title="Self View Only (L)"
+                >
+                  <User className="w-4 h-4" />
+                </Button>
+              </div>
 
               <Button
                 size="icon"

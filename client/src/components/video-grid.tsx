@@ -10,7 +10,7 @@ import { useConnectionQuality } from "@/hooks/use-connection-quality";
 import { NetworkIndicator } from "@/components/network-indicator";
 import { Button } from "@/components/ui/button";
 
-export type ViewMode = "grid" | "speaker";
+export type ViewMode = "grid" | "speaker" | "self";
 
 interface VideoGridProps {
   participants: Participant[];
@@ -52,11 +52,14 @@ export function VideoGrid({ participants, localStream, screenStream, currentPart
   const getGridClass = () => {
     const count = visibleParticipants.length + (screenStream ? 1 : 0);
     
-    if (count === 1) return "grid-cols-1";
-    if (gridColumns === 2) return "grid-cols-2";
-    if (gridColumns === 3) return "grid-cols-3";
-    if (gridColumns === 4) return "grid-cols-4";
-    return `grid-cols-${gridColumns}`;
+    // Equal division podcast-style layout based on participant count
+    if (count === 1) return "grid-cols-1 grid-rows-1";
+    if (count === 2) return "grid-cols-2 grid-rows-1";
+    if (count === 3) return "grid-cols-3 grid-rows-1";
+    if (count === 4) return "grid-cols-2 grid-rows-2";
+    if (count <= 6) return "grid-cols-3 grid-rows-2";
+    if (count <= 9) return "grid-cols-3 grid-rows-3";
+    return "grid-cols-4 auto-rows-fr";
   };
 
   const handleAudioLevelChange = useCallback((participantId: string, level: number) => {
@@ -102,10 +105,32 @@ export function VideoGrid({ participants, localStream, screenStream, currentPart
     );
   };
 
-  // Render grid view
+  // Find self participant for self-view mode
+  const selfParticipant = participants.find(p => p.id === currentParticipantId);
+
+  // Render self-view only mode - fullscreen view of just yourself
+  if (viewMode === "self" && selfParticipant) {
+    return (
+      <div className="h-full w-full p-4" data-testid="video-grid-self">
+        <div className="h-full w-full max-w-4xl mx-auto">
+          <VideoTile
+            participant={selfParticipant}
+            stream={localStream}
+            isSelf={true}
+            videoSettings={videoSettings}
+            isActiveSpeaker={false}
+            onAudioLevelChange={handleAudioLevelChange}
+            size="large"
+          />
+        </div>
+      </div>
+    );
+  }
+
+  // Render grid view - equal division podcast layout
   if (viewMode === "grid") {
     return (
-      <div className={`grid ${getGridClass()} gap-4 h-full w-full`} data-testid="video-grid">
+      <div className={`grid ${getGridClass()} gap-4 h-full w-full p-4`} data-testid="video-grid">
         {screenStream && (
           <VideoTile
             participant={{ id: "screen", name: "Screen Share", roomId: "", isAudioEnabled: false, isVideoEnabled: true, isScreenSharing: true, isHost: false, approvalStatus: "approved", handRaised: false, canRecord: false, joinedAt: Date.now() }}
