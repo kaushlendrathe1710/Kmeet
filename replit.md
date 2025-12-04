@@ -181,7 +181,12 @@ Key features include:
   - Connections requested before TURN is ready are queued and processed once ready
   - Queue only drains when both ICE servers and media stream are available
   - Prevents STUN-only connections that fail across networks
-- **Reliable TURN Servers**: Uses Metered.ca TURN servers (free tier) with multiple fallback options on ports 80, 443, and TCP variants for maximum compatibility
+- **Reliable TURN Servers**: Uses Open Relay Project (openrelay.metered.ca) - a free, production-ready TURN service with 99.999% uptime on ports 80, 443, TCP, and TLS
+- **Fixed Stale Connection Issue**: 
+  - Connections that work once then fail on reconnect are now properly cleaned up
+  - When creating a new connection, stale (failed/disconnected/closed) connections are automatically closed and replaced
+  - Proper cleanup on participant-left events
+  - 10-second timeout for "disconnected" state to auto-cleanup persistent disconnects
 - **Mobile Camera Support**: 
   - Added mobile device detection for camera initialization
   - Uses front-facing camera ("user" mode) on mobile

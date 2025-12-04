@@ -650,10 +650,33 @@ export default function Room() {
   ) => {
     console.log(`🔗 Creating peer connection to ${remoteParticipantId}, initiator: ${initiator}, stream tracks: ${stream.getTracks().length}`);
     
-    // Don't create duplicate connections
-    if (peersRef.current.has(remoteParticipantId)) {
-      console.log(`Already have connection to ${remoteParticipantId}`);
-      return peersRef.current.get(remoteParticipantId);
+    // Check for existing connection and handle stale connections
+    const existingPeer = peersRef.current.get(remoteParticipantId);
+    if (existingPeer) {
+      const pc = existingPeer._pc;
+      const state = pc?.connectionState;
+      
+      // If connection is healthy, don't create a new one
+      if (state === 'connected' || state === 'connecting') {
+        console.log(`[WebRTC] Reusing healthy connection to ${remoteParticipantId} (state: ${state})`);
+        return existingPeer;
+      }
+      
+      // Connection is stale (failed, disconnected, closed, or new but never connected)
+      // Clean it up and create a fresh one
+      console.log(`[WebRTC] ♻️ Cleaning up stale connection to ${remoteParticipantId} (state: ${state})`);
+      try {
+        pc?.close();
+      } catch (e) {
+        // Ignore close errors
+      }
+      peersRef.current.delete(remoteParticipantId);
+      peerRetryCountRef.current.delete(remoteParticipantId);
+      setRemoteStreams(prev => {
+        const newMap = new Map(prev);
+        newMap.delete(remoteParticipantId);
+        return newMap;
+      });
     }
 
     // Gate: Wait for ICE servers (including TURN) before creating connections
@@ -798,8 +821,27 @@ export default function Room() {
           newMap.delete(remoteParticipantId);
           return newMap;
         });
+      } else if (pc.connectionState === "disconnected") {
+        // "disconnected" is transient, but if it persists, we should clean up
+        console.log(`[WebRTC] Connection disconnected to ${remoteParticipantId}, waiting for reconnection...`);
+        // Set a timeout to cleanup if we don't reconnect within 10 seconds
+        setTimeout(() => {
+          const currentPeer = peersRef.current.get(remoteParticipantId);
+          if (currentPeer && currentPeer._pc === pc && pc.connectionState !== "connected") {
+            console.log(`[WebRTC] ⏱️ Connection to ${remoteParticipantId} still disconnected after timeout, cleaning up`);
+            try {
+              pc.close();
+            } catch (e) {}
+            peersRef.current.delete(remoteParticipantId);
+            peerRetryCountRef.current.delete(remoteParticipantId);
+            setRemoteStreams(prev => {
+              const newMap = new Map(prev);
+              newMap.delete(remoteParticipantId);
+              return newMap;
+            });
+          }
+        }, 10000);
       }
-      // Note: "disconnected" is transient - don't cleanup, wait for reconnection or failure
     };
 
     pc.oniceconnectionstatechange = () => {
@@ -849,10 +891,25 @@ export default function Room() {
   ) => {
     console.log(`🔗 Creating peer connection to ${remoteParticipantId}, initiator: ${initiator}`);
     
-    // Don't create duplicate connections
-    if (peersRef.current.has(remoteParticipantId)) {
-      console.log(`Already have connection to ${remoteParticipantId}`);
-      return peersRef.current.get(remoteParticipantId);
+    // Check for existing connection and handle stale connections
+    const existingPeer = peersRef.current.get(remoteParticipantId);
+    if (existingPeer) {
+      const pc = existingPeer._pc;
+      const state = pc?.connectionState;
+      
+      // If connection is healthy, don't create a new one
+      if (state === 'connected' || state === 'connecting') {
+        console.log(`[WebRTC] Reusing healthy connection to ${remoteParticipantId} (state: ${state})`);
+        return existingPeer;
+      }
+      
+      // Connection is stale - clean it up
+      console.log(`[WebRTC] ♻️ Cleaning up stale connection to ${remoteParticipantId} (state: ${state})`);
+      try {
+        pc?.close();
+      } catch (e) {}
+      peersRef.current.delete(remoteParticipantId);
+      peerRetryCountRef.current.delete(remoteParticipantId);
     }
 
     // Gate: Wait for ICE servers (including TURN) before creating connections
@@ -1277,16 +1334,24 @@ export default function Room() {
         break;
       
       case "participant-left":
+        console.log(`[WebRTC] Participant left: ${message.participantId}`);
         setParticipants(prev => prev.filter(p => p.id !== message.participantId));
         setRemoteStreams(prev => {
           const newStreams = new Map(prev);
           newStreams.delete(message.participantId);
           return newStreams;
         });
-        const peer = peersRef.current.get(message.participantId);
-        if (peer) {
-          peer.destroy();
+        // Clean up peer connection properly
+        const leavingPeer = peersRef.current.get(message.participantId);
+        if (leavingPeer) {
+          console.log(`[WebRTC] Closing connection to ${message.participantId}`);
+          try {
+            leavingPeer._pc?.close();
+          } catch (e) {
+            // Ignore close errors
+          }
           peersRef.current.delete(message.participantId);
+          peerRetryCountRef.current.delete(message.participantId);
         }
         toast({
           title: "Participant Left",
