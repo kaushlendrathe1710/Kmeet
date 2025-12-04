@@ -176,6 +176,11 @@ Key features include:
 ## Recent Changes
 
 ### December 4, 2025 (Latest)
+- **Fixed Cross-Network Connection Race Condition**: 
+  - Peer connections now wait for TURN credentials to load before being created
+  - Connections requested before TURN is ready are queued and processed once ready
+  - Queue only drains when both ICE servers and media stream are available
+  - Prevents STUN-only connections that fail across networks
 - **Dynamic TURN Server Credentials**: Fetches fresh TURN credentials from Cloudflare (speed.cloudflare.com/turn-creds) on room mount, with fallback to static TURN servers for cross-network connectivity
 - **ICE Connection Retry Logic**: 
   - Automatic retry on failed connections (up to 3 attempts)

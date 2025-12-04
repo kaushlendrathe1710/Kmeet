@@ -382,6 +382,9 @@ export default function Room() {
       streamReadyRef.current = true;
       console.log("✅ Local stream ready, processing pending connections...");
       
+      // Also drain any ICE-gated pending connections
+      setTimeout(() => drainPendingPeers(), 50);
+      
       // Process any pending connections that were queued before stream was ready
       if (pendingConnectionsRef.current.length > 0) {
         console.log(`📋 Processing ${pendingConnectionsRef.current.length} pending connections`);
@@ -457,6 +460,9 @@ export default function Room() {
     { urls: "stun:stun1.l.google.com:19302" },
   ]);
   const iceServersRef = useRef<RTCIceServer[]>(iceServers);
+  const [iceServersReady, setIceServersReady] = useState(false);
+  const iceServersReadyRef = useRef(false);
+  const pendingPeerConnectionsRef = useRef<Array<{ remoteId: string; initiator: boolean }>>([]);
   
   // Fetch dynamic TURN credentials on mount
   useEffect(() => {
@@ -479,8 +485,11 @@ export default function Room() {
           if (data.iceServers && Array.isArray(data.iceServers)) {
             const servers = [...baseServers, ...data.iceServers];
             console.log("[WebRTC] ✅ Got Cloudflare TURN credentials:", data.iceServers.length, "servers");
+            console.log("[WebRTC] TURN URLs:", data.iceServers.map((s: any) => s.urls).flat());
             setIceServers(servers);
             iceServersRef.current = servers;
+            setIceServersReady(true);
+            iceServersReadyRef.current = true;
             return;
           }
         }
@@ -512,10 +521,49 @@ export default function Room() {
       ];
       setIceServers(fallbackServers);
       iceServersRef.current = fallbackServers;
+      setIceServersReady(true);
+      iceServersReadyRef.current = true;
     };
     
     fetchTurnCredentials();
   }, []);
+
+  // Helper to drain pending peer connections - called when both ICE servers and stream are ready
+  const drainPendingPeers = useCallback(() => {
+    if (!iceServersReadyRef.current || !streamReadyRef.current) {
+      return; // Not ready yet
+    }
+    
+    const pending = pendingPeerConnectionsRef.current;
+    if (pending.length === 0) {
+      return; // Nothing to drain
+    }
+    
+    const outboundStream = getOutboundStream();
+    if (!outboundStream) {
+      console.log(`[WebRTC] ⏳ Stream not ready yet, keeping ${pending.length} connections queued`);
+      return; // Keep queue intact until stream is available
+    }
+    
+    console.log(`[WebRTC] 🚀 Draining ${pending.length} pending peer connections`);
+    // Clear queue and process
+    const toProcess = [...pending];
+    pendingPeerConnectionsRef.current = [];
+    
+    toProcess.forEach(({ remoteId, initiator }) => {
+      if (!peersRef.current.has(remoteId)) {
+        console.log(`[WebRTC] Creating deferred connection to ${remoteId}`);
+        createPeerConnectionWithStream(remoteId, initiator, outboundStream);
+      }
+    });
+  }, []);
+  
+  // Trigger drain when ICE servers become ready
+  useEffect(() => {
+    if (iceServersReady) {
+      drainPendingPeers();
+    }
+  }, [iceServersReady, drainPendingPeers]);
 
   // Helper function to get outbound stream with both audio and video
   // Uses refs to avoid stale closure issues when called from state setter callbacks
@@ -592,9 +640,22 @@ export default function Room() {
       return peersRef.current.get(remoteParticipantId);
     }
 
+    // Gate: Wait for ICE servers (including TURN) before creating connections
+    if (!iceServersReadyRef.current) {
+      console.log(`[WebRTC] ⏳ ICE servers not ready yet, queuing connection to ${remoteParticipantId}`);
+      pendingPeerConnectionsRef.current.push({ remoteId: remoteParticipantId, initiator });
+      // Schedule a drain attempt in case ICE becomes ready soon
+      setTimeout(() => drainPendingPeers(), 100);
+      return null;
+    }
+
     // Use ref for latest ICE servers to avoid stale closures
     const currentIceServers = iceServersRef.current;
-    console.log(`[WebRTC] Using ${currentIceServers.length} ICE servers`);
+    const hasTurn = currentIceServers.some(s => {
+      const urls = Array.isArray(s.urls) ? s.urls : [s.urls];
+      return urls.some(url => url.startsWith('turn:') || url.startsWith('turns:'));
+    });
+    console.log(`[WebRTC] Using ${currentIceServers.length} ICE servers (TURN available: ${hasTurn})`);
     
     const pc = new RTCPeerConnection({ iceServers: currentIceServers });
 
@@ -772,9 +833,22 @@ export default function Room() {
       return peersRef.current.get(remoteParticipantId);
     }
 
+    // Gate: Wait for ICE servers (including TURN) before creating connections
+    if (!iceServersReadyRef.current) {
+      console.log(`[WebRTC] ⏳ ICE servers not ready yet, queuing connection to ${remoteParticipantId}`);
+      pendingPeerConnectionsRef.current.push({ remoteId: remoteParticipantId, initiator });
+      // Schedule a drain attempt in case ICE becomes ready soon
+      setTimeout(() => drainPendingPeers(), 100);
+      return null;
+    }
+
     // Use ref for latest ICE servers
     const currentIceServers = iceServersRef.current;
-    console.log(`[WebRTC] Using ${currentIceServers.length} ICE servers`);
+    const hasTurn = currentIceServers.some(s => {
+      const urls = Array.isArray(s.urls) ? s.urls : [s.urls];
+      return urls.some(url => url.startsWith('turn:') || url.startsWith('turns:'));
+    });
+    console.log(`[WebRTC] Using ${currentIceServers.length} ICE servers (TURN available: ${hasTurn})`);
     const pc = new RTCPeerConnection({ iceServers: currentIceServers });
 
     // Add local tracks to the connection
