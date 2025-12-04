@@ -81,7 +81,9 @@ Key features include:
 
 ### Third-Party Services
 - Google Fonts CDN (Inter, JetBrains Mono)
-- Google STUN servers (ice.google.com:19302, ice1.google.com:19302)
+- Google STUN servers (stun.l.google.com:19302, stun1.l.google.com:19302)
+- Cloudflare TURN servers (speed.cloudflare.com/turn-creds) for cross-network connectivity
+- Fallback static TURN servers for reliability
 
 ### Key Libraries
 - **WebRTC**: `simple-peer`, `recordrtc`
@@ -173,7 +175,22 @@ Key features include:
 
 ## Recent Changes
 
-### November 29, 2025 (Latest)
+### December 4, 2025 (Latest)
+- **Dynamic TURN Server Credentials**: Fetches fresh TURN credentials from Cloudflare (speed.cloudflare.com/turn-creds) on room mount, with fallback to static TURN servers for cross-network connectivity
+- **ICE Connection Retry Logic**: 
+  - Automatic retry on failed connections (up to 3 attempts)
+  - Initiator-only retries prevent both-sides racing
+  - Exponential backoff (1s, 2s, 4s, capped at 8s)
+  - Aborts retry if peer leaves room
+  - Clears retry counter on successful connection
+- **Improved Connection State Handling**:
+  - "disconnected" treated as transient (no cleanup, waits for reconnect)
+  - Only "failed" and "closed" trigger peer cleanup
+  - Prevents UI churn from temporary network drops
+- **Enhanced ICE Candidate Logging**: Shows candidate types (relay/srflx/host) and selected candidate pair for debugging
+- **Video Grid Improvements**: Videos now fill 100% of available screen space between header and controls
+
+### November 29, 2025
 - **Camera/Mic Toggle Rewrite**: Now works exactly like Google Meet and Zoom
   - OFF: `track.stop()` releases hardware (camera LED turns off)
   - ON: `getUserMedia()` requests fresh access (camera LED turns on)
