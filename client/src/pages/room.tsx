@@ -364,41 +364,80 @@ export default function Room() {
 
   const initializeMedia = async () => {
     try {
-      // Detect if mobile device
+      // Detect if mobile device (iOS needs special handling)
       const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-      console.log(`[Media] Initializing media, mobile: ${isMobile}`);
+      const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
+      console.log(`[Media] Initializing media, mobile: ${isMobile}, iOS: ${isIOS}`);
       
-      // Mobile-friendly video constraints with fallback
-      const videoConstraints = isMobile 
-        ? { 
-            facingMode: "user",
-            width: { ideal: 1280, max: 1920 },
-            height: { ideal: 720, max: 1080 },
-          }
-        : { 
-            width: { ideal: 1920, max: 1920 },
-            height: { ideal: 1080, max: 1080 },
-          };
+      // Check if getUserMedia is available
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        throw new Error("getUserMedia not supported - requires HTTPS");
+      }
       
       let stream: MediaStream;
-      try {
-        stream = await navigator.mediaDevices.getUserMedia({
-          video: videoConstraints,
-          audio: {
-            echoCancellation: true,
-            noiseSuppression: true,
-            autoGainControl: true,
-          },
-        });
-        console.log("[Media] ✅ Got media stream with preferred settings");
-      } catch (preferredError) {
-        console.warn("[Media] Preferred settings failed, trying basic constraints:", preferredError);
-        // Fallback to basic constraints
-        stream = await navigator.mediaDevices.getUserMedia({
-          video: true,
-          audio: true,
-        });
-        console.log("[Media] ✅ Got media stream with basic settings");
+      
+      // iOS Safari has issues requesting audio+video together - request separately
+      if (isIOS) {
+        console.log("[Media] iOS detected - requesting video and audio separately");
+        try {
+          // Request video first
+          const videoStream = await navigator.mediaDevices.getUserMedia({ 
+            video: { facingMode: "user" } 
+          });
+          console.log("[Media] ✅ Got video stream on iOS");
+          
+          // Then request audio
+          const audioStream = await navigator.mediaDevices.getUserMedia({ 
+            audio: true 
+          });
+          console.log("[Media] ✅ Got audio stream on iOS");
+          
+          // Combine streams
+          stream = new MediaStream([
+            ...videoStream.getVideoTracks(),
+            ...audioStream.getAudioTracks()
+          ]);
+          console.log("[Media] ✅ Combined iOS streams");
+        } catch (iosError) {
+          console.warn("[Media] iOS separate request failed, trying combined:", iosError);
+          // Fallback to combined request
+          stream = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: "user" },
+            audio: true,
+          });
+        }
+      } else {
+        // Non-iOS: use standard approach with constraints
+        const videoConstraints = isMobile 
+          ? { 
+              facingMode: "user",
+              width: { ideal: 1280, max: 1920 },
+              height: { ideal: 720, max: 1080 },
+            }
+          : { 
+              width: { ideal: 1920, max: 1920 },
+              height: { ideal: 1080, max: 1080 },
+            };
+        
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({
+            video: videoConstraints,
+            audio: {
+              echoCancellation: true,
+              noiseSuppression: true,
+              autoGainControl: true,
+            },
+          });
+          console.log("[Media] ✅ Got media stream with preferred settings");
+        } catch (preferredError) {
+          console.warn("[Media] Preferred settings failed, trying basic constraints:", preferredError);
+          // Fallback to basic constraints
+          stream = await navigator.mediaDevices.getUserMedia({
+            video: true,
+            audio: true,
+          });
+          console.log("[Media] ✅ Got media stream with basic settings");
+        }
       }
       
       mediaProcessorRef.current = new MediaProcessor();
@@ -1777,28 +1816,50 @@ export default function Room() {
       try {
         console.log(`📷 Requesting camera access...`);
         
-        // Detect mobile for appropriate constraints
+        // Detect mobile/iOS for appropriate constraints
         const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-        console.log(`[Media] Camera toggle, mobile: ${isMobile}`);
-        
-        const videoConstraints = isMobile 
-          ? {
-              facingMode: "user",
-              width: { ideal: 1280, max: 1920 },
-              height: { ideal: 720, max: 1080 }
-            }
-          : {
-              width: { ideal: 1920 },
-              height: { ideal: 1080 }
-            };
+        const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
+        console.log(`[Media] Camera toggle, mobile: ${isMobile}, iOS: ${isIOS}`);
         
         let stream: MediaStream;
-        try {
-          stream = await navigator.mediaDevices.getUserMedia({ video: videoConstraints });
-        } catch (e) {
-          // Fallback to basic video constraints
-          console.log(`[Media] Falling back to basic video constraints`);
-          stream = await navigator.mediaDevices.getUserMedia({ video: true });
+        
+        if (isIOS) {
+          // iOS needs simpler constraints
+          try {
+            stream = await navigator.mediaDevices.getUserMedia({ 
+              video: { facingMode: "user" } 
+            });
+          } catch (e) {
+            console.log(`[Media] iOS fallback to basic video`);
+            stream = await navigator.mediaDevices.getUserMedia({ video: true });
+          }
+        } else if (isMobile) {
+          // Android mobile
+          try {
+            stream = await navigator.mediaDevices.getUserMedia({ 
+              video: {
+                facingMode: "user",
+                width: { ideal: 1280, max: 1920 },
+                height: { ideal: 720, max: 1080 }
+              }
+            });
+          } catch (e) {
+            console.log(`[Media] Mobile fallback to basic video`);
+            stream = await navigator.mediaDevices.getUserMedia({ video: true });
+          }
+        } else {
+          // Desktop
+          try {
+            stream = await navigator.mediaDevices.getUserMedia({ 
+              video: {
+                width: { ideal: 1920 },
+                height: { ideal: 1080 }
+              }
+            });
+          } catch (e) {
+            console.log(`[Media] Desktop fallback to basic video`);
+            stream = await navigator.mediaDevices.getUserMedia({ video: true });
+          }
         }
         
         const newVideoTrack = stream.getVideoTracks()[0];

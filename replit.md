@@ -199,6 +199,8 @@ Key features include:
   - Flexible resolution constraints with fallback to basic settings
   - Better error handling for device-specific camera limitations
   - Camera/mic toggle now also uses mobile-friendly constraints with fallback
+  - **iOS-specific fix**: Requests video and audio separately (iOS 14+ has issues with combined requests)
+  - Simpler constraints on iOS for better compatibility
 - **ICE Connection Retry Logic**: 
   - Automatic retry on failed connections (up to 3 attempts)
   - Initiator-only retries prevent both-sides racing
