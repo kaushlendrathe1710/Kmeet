@@ -198,6 +198,7 @@ Key features include:
   - Uses front-facing camera ("user" mode) on mobile
   - Flexible resolution constraints with fallback to basic settings
   - Better error handling for device-specific camera limitations
+  - Camera/mic toggle now also uses mobile-friendly constraints with fallback
 - **ICE Connection Retry Logic**: 
   - Automatic retry on failed connections (up to 3 attempts)
   - Initiator-only retries prevent both-sides racing

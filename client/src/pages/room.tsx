@@ -1646,9 +1646,16 @@ export default function Room() {
     } else {
       // === TURN ON ===
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          audio: { echoCancellation: true, noiseSuppression: true, sampleRate: 48000 },
-        });
+        let stream: MediaStream;
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({
+            audio: { echoCancellation: true, noiseSuppression: true, sampleRate: 48000 },
+          });
+        } catch (e) {
+          // Fallback to basic audio for mobile devices
+          console.log(`[Media] Falling back to basic audio constraints`);
+          stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        }
         const newAudioTrack = stream.getAudioTracks()[0];
         
         // Get ONLY live video tracks (not stopped ones)
@@ -1769,9 +1776,31 @@ export default function Room() {
       // === TURN ON - Request fresh camera access ===
       try {
         console.log(`📷 Requesting camera access...`);
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: { width: 1920, height: 1080 },
-        });
+        
+        // Detect mobile for appropriate constraints
+        const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+        console.log(`[Media] Camera toggle, mobile: ${isMobile}`);
+        
+        const videoConstraints = isMobile 
+          ? {
+              facingMode: "user",
+              width: { ideal: 1280, max: 1920 },
+              height: { ideal: 720, max: 1080 }
+            }
+          : {
+              width: { ideal: 1920 },
+              height: { ideal: 1080 }
+            };
+        
+        let stream: MediaStream;
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({ video: videoConstraints });
+        } catch (e) {
+          // Fallback to basic video constraints
+          console.log(`[Media] Falling back to basic video constraints`);
+          stream = await navigator.mediaDevices.getUserMedia({ video: true });
+        }
+        
         const newVideoTrack = stream.getVideoTracks()[0];
         console.log(`📷 Got new video track: ${newVideoTrack.id}`);
         
