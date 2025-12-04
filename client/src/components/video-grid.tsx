@@ -111,7 +111,7 @@ export function VideoGrid({ participants, localStream, screenStream, currentPart
   // Render self-view only mode - fullscreen view of just yourself
   if (viewMode === "self" && selfParticipant) {
     return (
-      <div className="h-full w-full p-2" data-testid="video-grid-self">
+      <div className="h-full w-full" data-testid="video-grid-self">
         <VideoTile
           participant={selfParticipant}
           stream={localStream}
@@ -128,7 +128,7 @@ export function VideoGrid({ participants, localStream, screenStream, currentPart
   // Render grid view - equal division podcast layout
   if (viewMode === "grid") {
     return (
-      <div className={`grid ${getGridClass()} gap-2 h-full w-full p-2`} data-testid="video-grid">
+      <div className={`grid ${getGridClass()} gap-1 h-full w-full`} data-testid="video-grid">
         {screenStream && (
           <VideoTile
             participant={{ id: "screen", name: "Screen Share", roomId: "", isAudioEnabled: false, isVideoEnabled: true, isScreenSharing: true, isHost: false, approvalStatus: "approved", handRaised: false, canRecord: false, joinedAt: Date.now() }}
@@ -146,7 +146,7 @@ export function VideoGrid({ participants, localStream, screenStream, currentPart
 
   // Render speaker view
   return (
-    <div className="flex flex-col h-full w-full gap-2 p-2" data-testid="video-grid-speaker">
+    <div className="flex flex-col h-full w-full gap-1" data-testid="video-grid-speaker">
       {/* Main speaker area - prioritize screen share if active */}
       <div className="flex-1 min-h-0">
         {screenStream ? (
