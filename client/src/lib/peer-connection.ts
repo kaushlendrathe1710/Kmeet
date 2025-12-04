@@ -16,36 +16,40 @@ const iceServers: RTCIceServer[] = [
   { urls: "stun:stun2.l.google.com:19302" },
   { urls: "stun:stun3.l.google.com:19302" },
   { urls: "stun:stun4.l.google.com:19302" },
+  { urls: "stun:stun.cloudflare.com:3478" },
   
-  // Metered TURN servers (reliable, with valid credentials)
-  // UDP on port 80 (most likely to work through firewalls)
+  // freestun.net - Free TURN server with working static credentials
   {
-    urls: "turn:a.relay.metered.ca:80",
-    username: "83eebabf8b4cce9d5dbcb649",
-    credential: "2D7JvfkOQtBdYW3R",
+    urls: "turn:freestun.net:3478",
+    username: "free",
+    credential: "free",
   },
-  // UDP on port 443
   {
-    urls: "turn:a.relay.metered.ca:443",
-    username: "83eebabf8b4cce9d5dbcb649",
-    credential: "2D7JvfkOQtBdYW3R",
+    urls: "turn:freestun.net:5349",
+    username: "free",
+    credential: "free",
   },
-  // TCP on port 443 (works through most corporate firewalls)
   {
-    urls: "turn:a.relay.metered.ca:443?transport=tcp",
-    username: "83eebabf8b4cce9d5dbcb649",
-    credential: "2D7JvfkOQtBdYW3R",
-  },
-  // TURNS (TLS) on port 443 for maximum compatibility
-  {
-    urls: "turns:a.relay.metered.ca:443?transport=tcp",
-    username: "83eebabf8b4cce9d5dbcb649",
-    credential: "2D7JvfkOQtBdYW3R",
+    urls: "turns:freestun.net:5349",
+    username: "free",
+    credential: "free",
   },
   
-  // OpenRelay backup TURN servers
+  // Numb STUN/TURN - widely used free server
+  {
+    urls: "turn:numb.viagenie.ca",
+    username: "webrtc@live.com",
+    credential: "muazkh",
+  },
+  
+  // OpenRelay TURN servers (may have rate limits)
   {
     urls: "turn:openrelay.metered.ca:80",
+    username: "openrelayproject",
+    credential: "openrelayproject",
+  },
+  {
+    urls: "turn:openrelay.metered.ca:443",
     username: "openrelayproject",
     credential: "openrelayproject",
   },
