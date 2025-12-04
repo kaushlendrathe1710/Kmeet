@@ -492,54 +492,56 @@ export default function Room() {
   const iceServersReadyRef = useRef(false);
   const pendingPeerConnectionsRef = useRef<Array<{ remoteId: string; initiator: boolean }>>([]);
   
-  // Fetch dynamic TURN credentials on mount
+  // Configure TURN credentials on mount - using Open Relay Project (free, reliable)
   useEffect(() => {
-    const fetchTurnCredentials = async () => {
+    const setupIceServers = () => {
       console.log("[WebRTC] Setting up ICE servers with TURN support...");
       
-      // Use reliable public TURN servers that are known to work
-      // Metered.ca provides free TURN servers for testing
-      const reliableServers: RTCIceServer[] = [
-        // STUN servers
+      // Open Relay Project configuration (https://www.metered.ca/tools/openrelay/)
+      // This is a free, production-ready TURN service with 99.999% uptime
+      const iceServersConfig: RTCIceServer[] = [
+        // STUN servers for NAT traversal discovery
         { urls: "stun:stun.l.google.com:19302" },
         { urls: "stun:stun1.l.google.com:19302" },
-        { urls: "stun:stun2.l.google.com:19302" },
-        { urls: "stun:stun3.l.google.com:19302" },
-        { urls: "stun:stun4.l.google.com:19302" },
-        // Metered TURN servers (free tier, reliable)
+        { urls: "stun:openrelay.metered.ca:80" },
+        
+        // TURN servers for relay when direct connection fails (cross-network)
+        // UDP on port 80 - most likely to work through firewalls
         {
-          urls: [
-            "turn:a.relay.metered.ca:80",
-            "turn:a.relay.metered.ca:80?transport=tcp",
-            "turn:a.relay.metered.ca:443",
-            "turn:a.relay.metered.ca:443?transport=tcp",
-            "turns:a.relay.metered.ca:443",
-          ],
-          username: "83eebabf8b4cce9d5dbcb649",
-          credential: "2D7JvfxOQtBdYW3R",
+          urls: "turn:openrelay.metered.ca:80",
+          username: "openrelayproject",
+          credential: "openrelayproject",
         },
-        // OpenRelay TURN (backup)
+        // UDP on port 443 - fallback
         {
-          urls: [
-            "turn:openrelay.metered.ca:80",
-            "turn:openrelay.metered.ca:443",
-            "turn:openrelay.metered.ca:443?transport=tcp",
-          ],
+          urls: "turn:openrelay.metered.ca:443",
+          username: "openrelayproject",
+          credential: "openrelayproject",
+        },
+        // TCP on port 443 - works through most restrictive firewalls
+        {
+          urls: "turn:openrelay.metered.ca:443?transport=tcp",
+          username: "openrelayproject",
+          credential: "openrelayproject",
+        },
+        // TLS/TURNS on port 443 - encrypted relay for highest security
+        {
+          urls: "turns:openrelay.metered.ca:443",
           username: "openrelayproject",
           credential: "openrelayproject",
         },
       ];
       
-      console.log("[WebRTC] ✅ ICE servers configured with", reliableServers.length, "entries");
-      console.log("[WebRTC] TURN servers included for cross-network connectivity");
+      console.log("[WebRTC] ✅ ICE servers configured with Open Relay Project TURN");
+      console.log("[WebRTC] TURN servers: openrelay.metered.ca (ports 80, 443, TCP, TLS)");
       
-      setIceServers(reliableServers);
-      iceServersRef.current = reliableServers;
+      setIceServers(iceServersConfig);
+      iceServersRef.current = iceServersConfig;
       setIceServersReady(true);
       iceServersReadyRef.current = true;
     };
     
-    fetchTurnCredentials();
+    setupIceServers();
   }, []);
 
   // Helper to drain pending peer connections - called when both ICE servers and stream are ready
@@ -670,8 +672,14 @@ export default function Room() {
       return urls.some(url => url.startsWith('turn:') || url.startsWith('turns:'));
     });
     console.log(`[WebRTC] Using ${currentIceServers.length} ICE servers (TURN available: ${hasTurn})`);
+    console.log(`[WebRTC] ICE servers config:`, JSON.stringify(currentIceServers, null, 2));
     
-    const pc = new RTCPeerConnection({ iceServers: currentIceServers });
+    // Create peer connection - for debugging, we can force relay if direct connection fails
+    const pc = new RTCPeerConnection({ 
+      iceServers: currentIceServers,
+      // Uncomment below to FORCE relay mode for debugging (will fail if TURN doesn't work)
+      // iceTransportPolicy: 'relay',
+    });
 
     // Add local tracks to the connection
     stream.getTracks().forEach(track => {
