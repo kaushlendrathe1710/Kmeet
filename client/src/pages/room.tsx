@@ -118,6 +118,12 @@ export default function Room() {
   const backgroundProcessorRef = useRef<BackgroundProcessor | null>(null);
   const [processedStream, setProcessedStream] = useState<MediaStream | null>(null);
   const [backgroundProcessedStream, setBackgroundProcessedStream] = useState<MediaStream | null>(null);
+  
+  // Refs to track current stream values for use in callbacks (avoids closure issues)
+  const localStreamRef = useRef<MediaStream | null>(null);
+  const processedStreamRef = useRef<MediaStream | null>(null);
+  const backgroundProcessedStreamRef = useRef<MediaStream | null>(null);
+  
   const [videoSettings, setVideoSettings] = useState<VideoSettings>({
     brightness: 100,
     contrast: 100,
@@ -128,6 +134,19 @@ export default function Room() {
 
   const networkStats = useNetworkQuality(primaryPeerConnection);
   const bandwidthStats = useBandwidthAdaptation(primaryPeerConnection, videoQuality === "auto");
+
+  // Keep refs in sync with state (for use in callbacks to avoid stale closures)
+  useEffect(() => {
+    localStreamRef.current = localStream;
+  }, [localStream]);
+  
+  useEffect(() => {
+    processedStreamRef.current = processedStream;
+  }, [processedStream]);
+  
+  useEffect(() => {
+    backgroundProcessedStreamRef.current = backgroundProcessedStream;
+  }, [backgroundProcessedStream]);
 
   useAutoSave({
     roomId,
@@ -191,6 +210,7 @@ export default function Room() {
     const applyBackgroundProcessing = async () => {
       if (backgroundSettings.mode === 'none') {
         setBackgroundProcessedStream(null);
+        backgroundProcessedStreamRef.current = null;
         backgroundProcessorRef.current?.stopProcessing();
         return;
       }
@@ -201,6 +221,7 @@ export default function Room() {
       const bgStream = await backgroundProcessorRef.current.startProcessing(processedStream);
       if (bgStream) {
         setBackgroundProcessedStream(bgStream);
+        backgroundProcessedStreamRef.current = bgStream;
       }
     };
 
@@ -342,8 +363,11 @@ export default function Room() {
       mediaProcessorRef.current = new MediaProcessor();
       const enhanced = mediaProcessorRef.current.initializeAudioProcessing(stream);
       
+      // Set both state and refs for immediate availability in callbacks
       setLocalStream(stream);
       setProcessedStream(enhanced);
+      localStreamRef.current = stream;
+      processedStreamRef.current = enhanced;
       streamReadyRef.current = true;
       console.log("✅ Local stream ready, processing pending connections...");
       
@@ -416,23 +440,43 @@ export default function Room() {
     setVideoSettings(settings);
   };
 
-  // ICE server configuration for WebRTC
+  // ICE server configuration for WebRTC with STUN and TURN servers
   const iceServers: RTCIceServer[] = [
     { urls: "stun:stun.l.google.com:19302" },
     { urls: "stun:stun1.l.google.com:19302" },
+    { urls: "stun:stun2.l.google.com:19302" },
+    { urls: "stun:stun3.l.google.com:19302" },
+    { urls: "stun:stun4.l.google.com:19302" },
+    // Free TURN servers for NAT traversal (OpenRelay)
+    {
+      urls: "turn:openrelay.metered.ca:80",
+      username: "openrelayproject",
+      credential: "openrelayproject",
+    },
+    {
+      urls: "turn:openrelay.metered.ca:443",
+      username: "openrelayproject",
+      credential: "openrelayproject",
+    },
+    {
+      urls: "turn:openrelay.metered.ca:443?transport=tcp",
+      username: "openrelayproject",
+      credential: "openrelayproject",
+    },
   ];
 
-  // Helper function to get outbound stream with both audio (from processedStream) and video (from localStream/backgroundProcessedStream)
+  // Helper function to get outbound stream with both audio and video
+  // Uses refs to avoid stale closure issues when called from state setter callbacks
   const getOutboundStream = (): MediaStream | null => {
-    // Get video tracks from background processed stream or local stream
-    const videoSource = backgroundProcessedStream || localStream;
+    // Use refs for current stream values (avoids closure issues in callbacks)
+    const videoSource = backgroundProcessedStreamRef.current || localStreamRef.current;
     const videoTracks = videoSource?.getVideoTracks() || [];
     
-    // Get audio tracks from processed stream (enhanced audio) or local stream
-    const audioSource = processedStream || localStream;
+    const audioSource = processedStreamRef.current || localStreamRef.current;
     const audioTracks = audioSource?.getAudioTracks() || [];
     
     if (videoTracks.length === 0 && audioTracks.length === 0) {
+      console.log("⚠️ No tracks available for outbound stream");
       return null;
     }
     
@@ -1208,9 +1252,11 @@ export default function Room() {
           });
         });
         
-        // Update state
+        // Update state and refs
         setLocalStream(newLocalStream);
         setProcessedStream(newProcessedStream);
+        localStreamRef.current = newLocalStream;
+        processedStreamRef.current = newProcessedStream;
         setIsAudioEnabled(true);
         setParticipants(prev => prev.map(p => 
           p.id === participantId ? { ...p, isAudioEnabled: true } : p
@@ -1246,6 +1292,7 @@ export default function Room() {
       // 2. Stop background processor (clears internal video element srcObject)
       backgroundProcessorRef.current?.stopProcessing();
       setBackgroundProcessedStream(null);
+      backgroundProcessedStreamRef.current = null;
       
       // 3. Stop media processor video tracks
       mediaProcessorRef.current?.stopVideoTracks();
@@ -1272,6 +1319,7 @@ export default function Room() {
         // Create new stream with only audio to help garbage collection
         const audioOnly = new MediaStream(localStream.getAudioTracks().filter(t => t.readyState === 'live'));
         setLocalStream(audioOnly);
+        localStreamRef.current = audioOnly;
       }
       
       // 6. Stop AND remove all video tracks from processedStream
@@ -1284,6 +1332,7 @@ export default function Room() {
         });
         const audioOnly = new MediaStream(processedStream.getAudioTracks().filter(t => t.readyState === 'live'));
         setProcessedStream(audioOnly);
+        processedStreamRef.current = audioOnly;
       }
       
       // 7. Update state
@@ -1338,9 +1387,11 @@ export default function Room() {
           });
         });
         
-        // Update state (new references trigger React re-render)
+        // Update state and refs (refs for callbacks, state for React re-render)
         setLocalStream(newLocalStream);
         setProcessedStream(newProcessedStream);
+        localStreamRef.current = newLocalStream;
+        processedStreamRef.current = newProcessedStream;
         setIsVideoEnabled(true);
         setParticipants(prev => prev.map(p => 
           p.id === participantId ? { ...p, isVideoEnabled: true } : p
