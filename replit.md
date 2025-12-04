@@ -176,6 +176,12 @@ Key features include:
 ## Recent Changes
 
 ### December 4, 2025 (Latest)
+- **Fixed Critical Signaling Flow Issue**:
+  - Root cause: Both sides were initiating connections simultaneously, causing race conditions
+  - Fix: Only existing participants initiate to new joiners (new joiners wait for offers)
+  - Added ICE candidate buffering - candidates arriving before remote SDP is set are now queued
+  - Candidates are flushed after setRemoteDescription completes
+  - Prevents dropped ICE candidates that caused connection failures
 - **Fixed Cross-Network Connection Race Condition**: 
   - Peer connections now wait for TURN credentials to load before being created
   - Connections requested before TURN is ready are queued and processed once ready
@@ -185,7 +191,7 @@ Key features include:
 - **Fixed Stale Connection Issue**: 
   - Connections that work once then fail on reconnect are now properly cleaned up
   - When creating a new connection, stale (failed/disconnected/closed) connections are automatically closed and replaced
-  - Proper cleanup on participant-left events
+  - Proper cleanup on participant-left events (including ICE buffers)
   - 10-second timeout for "disconnected" state to auto-cleanup persistent disconnects
 - **Mobile Camera Support**: 
   - Added mobile device detection for camera initialization

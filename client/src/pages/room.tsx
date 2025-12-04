@@ -112,6 +112,8 @@ export default function Room() {
   const pendingConnectionsRef = useRef<Participant[]>([]);
   const streamReadyRef = useRef<boolean>(false);
   const peerRetryCountRef = useRef<Map<string, number>>(new Map());
+  const iceCandidateBufferRef = useRef<Map<string, RTCIceCandidate[]>>(new Map());
+  const remoteDescriptionSetRef = useRef<Map<string, boolean>>(new Map());
   const MAX_RETRY_ATTEMPTS = 3;
   const [primaryPeerConnection, setPrimaryPeerConnection] = useState<RTCPeerConnection | null>(null);
   const [duration, setDuration] = useState(0);
@@ -1049,28 +1051,66 @@ export default function Room() {
     return peerData;
   }, [roomId, participantId]);
 
+  // Flush buffered ICE candidates after remote description is set
+  const flushIceCandidates = useCallback((peerId: string, pc: RTCPeerConnection) => {
+    const buffered = iceCandidateBufferRef.current.get(peerId) || [];
+    if (buffered.length > 0) {
+      console.log(`[WebRTC] 🔄 Flushing ${buffered.length} buffered ICE candidates for ${peerId}`);
+      buffered.forEach(candidate => {
+        pc.addIceCandidate(candidate).catch(err => 
+          console.error(`[WebRTC] Error adding buffered ICE candidate:`, err)
+        );
+      });
+      iceCandidateBufferRef.current.delete(peerId);
+    }
+  }, []);
+
   // Handle incoming signaling data (offers, answers, ICE candidates)
   const handleSignal = useCallback((fromParticipantId: string, signal: { type: string; sdp?: RTCSessionDescription; candidate?: RTCIceCandidate }) => {
     console.log(`📥 Received signal from ${fromParticipantId}:`, signal.type);
     
     let peerData = peersRef.current.get(fromParticipantId);
     
-    // If we receive an offer but don't have a peer, create one
+    // If we receive an offer but don't have a peer, create one (we're the responder)
     if (!peerData && signal.type === "offer") {
+      console.log(`[WebRTC] 📞 Received offer from ${fromParticipantId}, creating peer connection as responder`);
       if (!streamReadyRef.current) {
-        console.error("No local stream available for peer connection - stream not ready yet");
+        console.error("[WebRTC] ❌ Cannot create peer - stream not ready yet");
         return;
       }
       const stream = getOutboundStream();
       if (!stream) {
-        console.error("No outbound stream available for peer connection");
+        console.error("[WebRTC] ❌ Cannot create peer - no outbound stream");
         return;
       }
+      // Initialize candidate buffer for this peer
+      iceCandidateBufferRef.current.set(fromParticipantId, []);
+      remoteDescriptionSetRef.current.set(fromParticipantId, false);
       peerData = createPeerConnectionWithStream(fromParticipantId, false, stream);
     }
     
+    // Handle ICE candidates - buffer them if remote description isn't set yet
+    if (signal.type === "candidate" && signal.candidate) {
+      const isRemoteDescSet = remoteDescriptionSetRef.current.get(fromParticipantId);
+      
+      if (!peerData || !isRemoteDescSet) {
+        // Buffer the candidate - either no peer yet or remote desc not set
+        console.log(`[WebRTC] 📦 Buffering ICE candidate for ${fromParticipantId} (peer exists: ${!!peerData}, remote desc set: ${isRemoteDescSet})`);
+        const buffer = iceCandidateBufferRef.current.get(fromParticipantId) || [];
+        buffer.push(new RTCIceCandidate(signal.candidate));
+        iceCandidateBufferRef.current.set(fromParticipantId, buffer);
+        return;
+      }
+      
+      // Remote description is set, add candidate directly
+      const pc = peerData._pc as RTCPeerConnection;
+      pc.addIceCandidate(new RTCIceCandidate(signal.candidate))
+        .catch(err => console.error("[WebRTC] Error adding ICE candidate:", err));
+      return;
+    }
+    
     if (!peerData) {
-      console.error("No peer connection for signal from:", fromParticipantId);
+      console.error(`[WebRTC] ❌ No peer connection for signal from: ${fromParticipantId}, signal type: ${signal.type}`);
       return;
     }
 
@@ -1078,7 +1118,13 @@ export default function Room() {
     
     if (signal.type === "offer" && signal.sdp) {
       pc.setRemoteDescription(new RTCSessionDescription(signal.sdp))
-        .then(() => pc.createAnswer())
+        .then(() => {
+          console.log(`[WebRTC] ✅ Remote description set for ${fromParticipantId}`);
+          remoteDescriptionSetRef.current.set(fromParticipantId, true);
+          // Flush any buffered ICE candidates
+          flushIceCandidates(fromParticipantId, pc);
+          return pc.createAnswer();
+        })
         .then(answer => pc.setLocalDescription(answer))
         .then(() => {
           console.log(`📤 Sending answer to ${fromParticipantId}`);
@@ -1090,15 +1136,18 @@ export default function Room() {
             signal: { type: "answer", sdp: pc.localDescription },
           }));
         })
-        .catch(err => console.error("Error handling offer:", err));
+        .catch(err => console.error("[WebRTC] Error handling offer:", err));
     } else if (signal.type === "answer" && signal.sdp) {
       pc.setRemoteDescription(new RTCSessionDescription(signal.sdp))
-        .catch(err => console.error("Error setting remote description:", err));
-    } else if (signal.type === "candidate" && signal.candidate) {
-      pc.addIceCandidate(new RTCIceCandidate(signal.candidate))
-        .catch(err => console.error("Error adding ICE candidate:", err));
+        .then(() => {
+          console.log(`[WebRTC] ✅ Remote description (answer) set for ${fromParticipantId}`);
+          remoteDescriptionSetRef.current.set(fromParticipantId, true);
+          // Flush any buffered ICE candidates
+          flushIceCandidates(fromParticipantId, pc);
+        })
+        .catch(err => console.error("[WebRTC] Error setting remote description:", err));
     }
-  }, [backgroundProcessedStream, processedStream, localStream, roomId, participantId]);
+  }, [backgroundProcessedStream, processedStream, localStream, roomId, participantId, flushIceCandidates]);
 
   // Initiate connections to all existing participants
   const initiateConnections = useCallback((otherParticipants: Participant[]) => {
@@ -1220,13 +1269,9 @@ export default function Room() {
           title: "Approved!",
           description: "You have been approved to join the meeting",
         });
-        // Initiate WebRTC connections to other approved participants
-        const approvedParticipants = message.participants.filter(
-          (p: Participant) => p.id !== participantId && p.approvalStatus === "approved"
-        );
-        if (approvedParticipants.length > 0) {
-          setTimeout(() => initiateConnections(approvedParticipants), 500);
-        }
+        // DON'T initiate connections - existing participants will send offers to us
+        // This prevents race conditions with duplicate offers
+        console.log(`[WebRTC] 🎉 Approved! Waiting for existing participants to send offers...`);
         break;
 
       case "approval-denied":
@@ -1254,34 +1299,23 @@ export default function Room() {
             p.id === message.participantId ? { ...p, approvalStatus: "approved" as const } : p
           );
           
-          // If I was just approved, I need to connect to all OTHER approved participants
+          // If I was just approved, DON'T initiate - wait for existing participants to send offers
+          // This prevents race conditions with duplicate offers
           if (message.participantId === participantId) {
-            console.log(`✅ I was approved! Connecting to existing participants...`);
+            console.log(`✅ I was approved! Waiting for existing participants to send offers...`);
             setIsWaitingApproval(false);
-            
-            const otherApproved = updated.filter(p => 
-              p.id !== participantId && p.approvalStatus === "approved"
-            );
-            
-            if (otherApproved.length > 0 && streamReadyRef.current) {
-              const stream = getOutboundStream();
-              if (stream) {
-                console.log(`🔗 Initiating connections to ${otherApproved.length} existing participants`);
-                setTimeout(() => {
-                  otherApproved.forEach(p => {
-                    console.log(`🔗 Connecting to existing participant: ${p.name} (${p.id})`);
-                    createPeerConnectionWithStream(p.id, true, stream);
-                  });
-                }, 500);
-              }
-            }
+            // Don't initiate - we'll receive offers from existing participants
           } else {
-            // Another participant was approved, I should connect to them
+            // Another participant was approved - I should initiate connection to them
+            // Only existing (approved) participants initiate to new joiners
+            console.log(`[WebRTC] 🆕 New participant approved: ${message.participantId}, I will initiate connection`);
+            
             if (streamReadyRef.current) {
               const stream = getOutboundStream();
               if (stream) {
                 console.log(`🔗 Initiating connection to newly approved participant: ${message.participantId}`);
-                setTimeout(() => createPeerConnectionWithStream(message.participantId, true, stream), 500);
+                // Small delay to ensure the new participant is ready
+                setTimeout(() => createPeerConnectionWithStream(message.participantId, true, stream), 300);
               } else {
                 console.log("⏳ No outbound stream, queueing connection for newly approved participant");
                 pendingConnectionsRef.current.push({
@@ -1341,7 +1375,7 @@ export default function Room() {
           newStreams.delete(message.participantId);
           return newStreams;
         });
-        // Clean up peer connection properly
+        // Clean up peer connection and buffers properly
         const leavingPeer = peersRef.current.get(message.participantId);
         if (leavingPeer) {
           console.log(`[WebRTC] Closing connection to ${message.participantId}`);
@@ -1352,6 +1386,8 @@ export default function Room() {
           }
           peersRef.current.delete(message.participantId);
           peerRetryCountRef.current.delete(message.participantId);
+          iceCandidateBufferRef.current.delete(message.participantId);
+          remoteDescriptionSetRef.current.delete(message.participantId);
         }
         toast({
           title: "Participant Left",
