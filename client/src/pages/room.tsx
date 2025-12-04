@@ -111,6 +111,8 @@ export default function Room() {
   const peersRef = useRef<Map<string, any>>(new Map());
   const pendingConnectionsRef = useRef<Participant[]>([]);
   const streamReadyRef = useRef<boolean>(false);
+  const peerRetryCountRef = useRef<Map<string, number>>(new Map());
+  const MAX_RETRY_ATTEMPTS = 3;
   const [primaryPeerConnection, setPrimaryPeerConnection] = useState<RTCPeerConnection | null>(null);
   const [duration, setDuration] = useState(0);
   const startTimeRef = useRef<number>(Date.now());
@@ -449,30 +451,71 @@ export default function Room() {
     setVideoSettings(settings);
   };
 
-  // ICE server configuration for WebRTC with STUN and TURN servers
-  const iceServers: RTCIceServer[] = [
+  // Dynamic ICE server configuration - fetched from Cloudflare for reliable TURN
+  const [iceServers, setIceServers] = useState<RTCIceServer[]>([
     { urls: "stun:stun.l.google.com:19302" },
     { urls: "stun:stun1.l.google.com:19302" },
-    { urls: "stun:stun2.l.google.com:19302" },
-    { urls: "stun:stun3.l.google.com:19302" },
-    { urls: "stun:stun4.l.google.com:19302" },
-    // Free TURN servers for NAT traversal (OpenRelay)
-    {
-      urls: "turn:openrelay.metered.ca:80",
-      username: "openrelayproject",
-      credential: "openrelayproject",
-    },
-    {
-      urls: "turn:openrelay.metered.ca:443",
-      username: "openrelayproject",
-      credential: "openrelayproject",
-    },
-    {
-      urls: "turn:openrelay.metered.ca:443?transport=tcp",
-      username: "openrelayproject",
-      credential: "openrelayproject",
-    },
-  ];
+  ]);
+  const iceServersRef = useRef<RTCIceServer[]>(iceServers);
+  
+  // Fetch dynamic TURN credentials on mount
+  useEffect(() => {
+    const fetchTurnCredentials = async () => {
+      console.log("[WebRTC] Fetching dynamic TURN credentials...");
+      
+      // Base STUN servers (always available)
+      const baseServers: RTCIceServer[] = [
+        { urls: "stun:stun.l.google.com:19302" },
+        { urls: "stun:stun1.l.google.com:19302" },
+        { urls: "stun:stun2.l.google.com:19302" },
+        { urls: "stun:stun.cloudflare.com:3478" },
+      ];
+      
+      try {
+        // Try Cloudflare TURN credentials (no API key needed, free)
+        const response = await fetch("https://speed.cloudflare.com/turn-creds");
+        if (response.ok) {
+          const data = await response.json();
+          if (data.iceServers && Array.isArray(data.iceServers)) {
+            const servers = [...baseServers, ...data.iceServers];
+            console.log("[WebRTC] ✅ Got Cloudflare TURN credentials:", data.iceServers.length, "servers");
+            setIceServers(servers);
+            iceServersRef.current = servers;
+            return;
+          }
+        }
+      } catch (error) {
+        console.warn("[WebRTC] Failed to fetch Cloudflare TURN:", error);
+      }
+      
+      // Fallback: Use static TURN servers with multiple options
+      console.log("[WebRTC] Using fallback static TURN servers");
+      const fallbackServers: RTCIceServer[] = [
+        ...baseServers,
+        // OpenRelay TURN on multiple ports
+        {
+          urls: [
+            "turn:openrelay.metered.ca:80",
+            "turn:openrelay.metered.ca:443",
+            "turn:openrelay.metered.ca:443?transport=tcp",
+            "turns:openrelay.metered.ca:443?transport=tcp",
+          ],
+          username: "openrelayproject",
+          credential: "openrelayproject",
+        },
+        // Additional public TURN servers
+        {
+          urls: "turn:relay.metered.ca:80",
+          username: "e8dd65b92cce8c4a93ef272e",
+          credential: "kHBPudMlT+hGfA0u",
+        },
+      ];
+      setIceServers(fallbackServers);
+      iceServersRef.current = fallbackServers;
+    };
+    
+    fetchTurnCredentials();
+  }, []);
 
   // Helper function to get outbound stream with both audio and video
   // Uses refs to avoid stale closure issues when called from state setter callbacks
@@ -506,6 +549,35 @@ export default function Room() {
     return compositeStream;
   };
 
+  // Helper to log the selected ICE candidate pair after connection
+  const logSelectedCandidatePair = (pc: RTCPeerConnection, remoteId: string) => {
+    try {
+      pc.getStats().then((stats) => {
+        stats.forEach((report) => {
+          if (report.type === "candidate-pair" && report.state === "succeeded") {
+            console.log(`[WebRTC] Connection type for ${remoteId}:`, {
+              localType: report.localCandidateType,
+              remoteType: report.remoteCandidateType,
+              protocol: report.protocol,
+            });
+            
+            // Find the actual candidate details
+            stats.forEach((candidate: any) => {
+              if (candidate.id === report.localCandidateId) {
+                console.log(`[WebRTC] Local endpoint: ${candidate.candidateType} via ${candidate.protocol}`);
+              }
+              if (candidate.id === report.remoteCandidateId) {
+                console.log(`[WebRTC] Remote endpoint: ${candidate.candidateType} via ${candidate.protocol}`);
+              }
+            });
+          }
+        });
+      }).catch(() => {});
+    } catch (e) {
+      // Stats not available
+    }
+  };
+
   // Helper function to create peer connection with a specific stream (used when stream is passed directly)
   const createPeerConnectionWithStream = (
     remoteParticipantId: string,
@@ -520,7 +592,11 @@ export default function Room() {
       return peersRef.current.get(remoteParticipantId);
     }
 
-    const pc = new RTCPeerConnection({ iceServers });
+    // Use ref for latest ICE servers to avoid stale closures
+    const currentIceServers = iceServersRef.current;
+    console.log(`[WebRTC] Using ${currentIceServers.length} ICE servers`);
+    
+    const pc = new RTCPeerConnection({ iceServers: currentIceServers });
 
     // Add local tracks to the connection
     stream.getTracks().forEach(track => {
@@ -528,10 +604,20 @@ export default function Room() {
       pc.addTrack(track, stream);
     });
 
-    // Handle ICE candidates
+    // Handle ICE candidates with detailed logging
     pc.onicecandidate = (event) => {
       if (event.candidate) {
-        console.log(`📤 Sending ICE candidate to ${remoteParticipantId}`);
+        // Log candidate type for debugging
+        const candidateStr = event.candidate.candidate;
+        const candidateType = candidateStr.includes("typ relay") ? "relay (TURN)" :
+                             candidateStr.includes("typ srflx") ? "srflx (STUN)" :
+                             candidateStr.includes("typ host") ? "host (local)" : "unknown";
+        console.log(`📤 ICE candidate for ${remoteParticipantId}: ${candidateType}`);
+        
+        if (candidateType === "relay (TURN)") {
+          console.log(`[WebRTC] ✅ TURN relay candidate found - cross-network connections should work!`);
+        }
+        
         wsRef.current?.send(JSON.stringify({
           type: "signal",
           roomId,
@@ -560,19 +646,92 @@ export default function Room() {
       console.log(`Connection state with ${remoteParticipantId}: ${pc.connectionState}`);
       if (pc.connectionState === "connected") {
         console.log(`✅ Successfully connected to ${remoteParticipantId}`);
+        // Reset retry counter on success
+        peerRetryCountRef.current.delete(remoteParticipantId);
+        // Log the selected candidate pair
+        logSelectedCandidatePair(pc, remoteParticipantId);
       }
-      if (pc.connectionState === "disconnected" || pc.connectionState === "failed" || pc.connectionState === "closed") {
+      if (pc.connectionState === "failed") {
+        console.error(`[WebRTC] ❌ Connection FAILED to ${remoteParticipantId}`);
+        
+        // Only the initiator should retry to avoid both sides racing
+        if (!initiator) {
+          console.log(`[WebRTC] Not initiator, waiting for other side to retry...`);
+          peersRef.current.delete(remoteParticipantId);
+          return;
+        }
+        
+        // Check if peer is still in participants list before retrying
+        const peerStillExists = participants.some(p => p.id === remoteParticipantId && p.approvalStatus === "approved");
+        if (!peerStillExists) {
+          console.log(`[WebRTC] Peer ${remoteParticipantId} no longer in room, not retrying`);
+          peersRef.current.delete(remoteParticipantId);
+          peerRetryCountRef.current.delete(remoteParticipantId);
+          return;
+        }
+        
+        // Attempt retry if we haven't exceeded max attempts
+        const retryCount = peerRetryCountRef.current.get(remoteParticipantId) || 0;
+        if (retryCount < MAX_RETRY_ATTEMPTS) {
+          console.log(`[WebRTC] 🔄 Retrying connection (attempt ${retryCount + 1}/${MAX_RETRY_ATTEMPTS})...`);
+          peerRetryCountRef.current.set(remoteParticipantId, retryCount + 1);
+          
+          // Close the failed connection
+          pc.close();
+          peersRef.current.delete(remoteParticipantId);
+          
+          // Retry with exponential backoff
+          const backoffDelay = Math.min(1000 * Math.pow(2, retryCount), 8000);
+          setTimeout(() => {
+            // Re-check if peer still exists before retry
+            const stillExists = participants.some(p => p.id === remoteParticipantId && p.approvalStatus === "approved");
+            if (stillExists && streamReadyRef.current) {
+              const outboundStream = getOutboundStream();
+              if (outboundStream) {
+                console.log(`[WebRTC] 🔄 Recreating peer connection to ${remoteParticipantId}...`);
+                createPeerConnectionWithStream(remoteParticipantId, true, outboundStream);
+              }
+            }
+          }, backoffDelay);
+          return;
+        } else {
+          console.error(`[WebRTC] ❌ Max retry attempts reached for ${remoteParticipantId}`);
+          console.error(`[WebRTC] TURN servers may be blocked. Try: different network, disable VPN, or use mobile data`);
+          peerRetryCountRef.current.delete(remoteParticipantId);
+        }
+        
         peersRef.current.delete(remoteParticipantId);
         setRemoteStreams(prev => {
           const newMap = new Map(prev);
           newMap.delete(remoteParticipantId);
           return newMap;
         });
+      } else if (pc.connectionState === "closed") {
+        // Only clean up on closed, not on transient disconnects
+        peersRef.current.delete(remoteParticipantId);
+        peerRetryCountRef.current.delete(remoteParticipantId);
+        setRemoteStreams(prev => {
+          const newMap = new Map(prev);
+          newMap.delete(remoteParticipantId);
+          return newMap;
+        });
       }
+      // Note: "disconnected" is transient - don't cleanup, wait for reconnection or failure
     };
 
     pc.oniceconnectionstatechange = () => {
-      console.log(`ICE connection state with ${remoteParticipantId}: ${pc.iceConnectionState}`);
+      console.log(`ICE state with ${remoteParticipantId}: ${pc.iceConnectionState}`);
+      if (pc.iceConnectionState === "failed") {
+        console.error(`[WebRTC] ❌ ICE connection FAILED - No suitable candidates found`);
+      }
+    };
+    
+    // Log ICE gathering state
+    pc.onicegatheringstatechange = () => {
+      console.log(`ICE gathering state with ${remoteParticipantId}: ${pc.iceGatheringState}`);
+      if (pc.iceGatheringState === "complete") {
+        console.log(`[WebRTC] ICE gathering complete for ${remoteParticipantId}`);
+      }
     };
 
     // Store the peer connection with metadata
@@ -613,17 +772,25 @@ export default function Room() {
       return peersRef.current.get(remoteParticipantId);
     }
 
-    const pc = new RTCPeerConnection({ iceServers });
+    // Use ref for latest ICE servers
+    const currentIceServers = iceServersRef.current;
+    console.log(`[WebRTC] Using ${currentIceServers.length} ICE servers`);
+    const pc = new RTCPeerConnection({ iceServers: currentIceServers });
 
     // Add local tracks to the connection
     stream.getTracks().forEach(track => {
       pc.addTrack(track, stream);
     });
 
-    // Handle ICE candidates
+    // Handle ICE candidates with detailed logging
     pc.onicecandidate = (event) => {
       if (event.candidate) {
-        console.log(`📤 Sending ICE candidate to ${remoteParticipantId}`);
+        const candidateStr = event.candidate.candidate;
+        const candidateType = candidateStr.includes("typ relay") ? "relay (TURN)" :
+                             candidateStr.includes("typ srflx") ? "srflx (STUN)" :
+                             candidateStr.includes("typ host") ? "host (local)" : "unknown";
+        console.log(`📤 ICE candidate for ${remoteParticipantId}: ${candidateType}`);
+        
         wsRef.current?.send(JSON.stringify({
           type: "signal",
           roomId,
@@ -649,14 +816,60 @@ export default function Room() {
 
     pc.onconnectionstatechange = () => {
       console.log(`Connection state with ${remoteParticipantId}: ${pc.connectionState}`);
-      if (pc.connectionState === "disconnected" || pc.connectionState === "failed" || pc.connectionState === "closed") {
+      if (pc.connectionState === "connected") {
+        console.log(`✅ Successfully connected to ${remoteParticipantId}`);
+        peerRetryCountRef.current.delete(remoteParticipantId);
+        logSelectedCandidatePair(pc, remoteParticipantId);
+      }
+      if (pc.connectionState === "failed") {
+        console.error(`[WebRTC] ❌ Connection FAILED to ${remoteParticipantId}`);
+        
+        // Only initiator should retry
+        if (!initiator) {
+          peersRef.current.delete(remoteParticipantId);
+          return;
+        }
+        
+        const retryCount = peerRetryCountRef.current.get(remoteParticipantId) || 0;
+        if (retryCount < MAX_RETRY_ATTEMPTS) {
+          console.log(`[WebRTC] 🔄 Retrying connection (attempt ${retryCount + 1}/${MAX_RETRY_ATTEMPTS})...`);
+          peerRetryCountRef.current.set(remoteParticipantId, retryCount + 1);
+          pc.close();
+          peersRef.current.delete(remoteParticipantId);
+          
+          const backoffDelay = Math.min(1000 * Math.pow(2, retryCount), 8000);
+          setTimeout(() => {
+            if (streamReadyRef.current) {
+              const outboundStream = getOutboundStream();
+              if (outboundStream) {
+                createPeerConnectionWithStream(remoteParticipantId, true, outboundStream);
+              }
+            }
+          }, backoffDelay);
+          return;
+        } else {
+          peerRetryCountRef.current.delete(remoteParticipantId);
+        }
+        
         peersRef.current.delete(remoteParticipantId);
         setRemoteStreams(prev => {
           const newMap = new Map(prev);
           newMap.delete(remoteParticipantId);
           return newMap;
         });
+      } else if (pc.connectionState === "closed") {
+        peersRef.current.delete(remoteParticipantId);
+        peerRetryCountRef.current.delete(remoteParticipantId);
+        setRemoteStreams(prev => {
+          const newMap = new Map(prev);
+          newMap.delete(remoteParticipantId);
+          return newMap;
+        });
       }
+    };
+
+    pc.oniceconnectionstatechange = () => {
+      console.log(`ICE state with ${remoteParticipantId}: ${pc.iceConnectionState}`);
     };
 
     // Store the peer connection with metadata
@@ -885,7 +1098,7 @@ export default function Room() {
       case "participant-approved":
         setParticipants(prev => {
           const updated = prev.map(p =>
-            p.id === message.participantId ? { ...p, approvalStatus: "approved" } : p
+            p.id === message.participantId ? { ...p, approvalStatus: "approved" as const } : p
           );
           
           // If I was just approved, I need to connect to all OTHER approved participants
