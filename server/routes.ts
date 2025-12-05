@@ -45,7 +45,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const hostPortMatch = cleanUrl.match(/^([^/?]+)/);
     const hostPort = hostPortMatch ? hostPortMatch[1] : cleanUrl;
     
-    console.log(`[TURN] Serving credentials for turn:${hostPort}`);
+    // Extract just the host (without port) for IP-based fallback
+    const hostOnly = hostPort.split(':')[0];
+    
+    // AWS EC2 public IP for direct IP-based connections (more reliable on mobile networks)
+    const turnIp = '43.205.187.5';
+    
+    console.log(`[TURN] Serving credentials for turn:${hostPort} (IP fallback: ${turnIp})`);
     
     res.json({
       iceServers: [
@@ -53,21 +59,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
         { urls: "stun:stun.l.google.com:19302" },
         { urls: "stun:stun1.l.google.com:19302" },
         
-        // Your self-hosted Coturn TURN server - UDP (default, fastest)
+        // Primary: IP-based TURN (most reliable across all networks)
+        {
+          urls: `turn:${turnIp}:3478`,
+          username: turnUsername,
+          credential: turnPassword,
+        },
+        // IP-based TCP fallback
+        {
+          urls: `turn:${turnIp}:3478?transport=tcp`,
+          username: turnUsername,
+          credential: turnPassword,
+        },
+        // Domain-based TURN as secondary option
         {
           urls: `turn:${hostPort}`,
           username: turnUsername,
           credential: turnPassword,
         },
-        // TCP fallback (works through more firewalls)
+        // Domain-based TCP fallback
         {
           urls: `turn:${hostPort}?transport=tcp`,
           username: turnUsername,
           credential: turnPassword,
         },
-        // TLS/TURNS if your Coturn supports it (port 5349 typically)
+        // TLS/TURNS on port 5349 (IP-based)
         {
-          urls: `turns:${hostPort.replace(':3478', ':5349')}`,
+          urls: `turns:${turnIp}:5349`,
           username: turnUsername,
           credential: turnPassword,
         },
