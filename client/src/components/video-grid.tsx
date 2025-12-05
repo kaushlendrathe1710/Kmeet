@@ -265,18 +265,25 @@ function VideoTile({ participant, stream, isSelf, videoSettings, isActiveSpeaker
       } hover-elevate transition-all`}
       data-testid={`video-tile-${participant.id}`}
     >
-      {participant.isVideoEnabled && stream ? (
+      {/* Always render video element for remote streams to enable audio playback */}
+      {/* Hide it visually when video is disabled, but keep it for audio */}
+      {stream && (
         <video
           ref={videoRef}
           autoPlay
           playsInline
           muted={isSelf}
-          className={`w-full h-full object-cover ${isSelf ? 'scale-x-[-1]' : ''}`}
+          className={`w-full h-full object-cover ${isSelf ? 'scale-x-[-1]' : ''} ${
+            !participant.isVideoEnabled ? 'hidden' : ''
+          }`}
           data-testid={`video-stream-${participant.id}`}
         />
-      ) : (
+      )}
+      
+      {/* Show placeholder when video is disabled */}
+      {(!participant.isVideoEnabled || !stream) && (
         <div 
-          className="w-full h-full flex items-center justify-center"
+          className="w-full h-full flex items-center justify-center absolute inset-0"
           style={{ background: getGradient(participant.name) }}
           data-testid={`video-off-${participant.id}`}
         >
