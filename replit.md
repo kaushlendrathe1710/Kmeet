@@ -175,7 +175,21 @@ Key features include:
 
 ## Recent Changes
 
-### December 4, 2025 (Latest)
+### December 5, 2025 (Latest)
+- **Fixed Audio Not Playing for Remote Participants**:
+  - Issue: Video element was only rendered when video was enabled, preventing audio playback
+  - Fix: Video element now always renders when stream exists (hidden when video disabled)
+  - Audio plays through the (hidden) video element even when remote participant's camera is off
+- **Enhanced TURN Server Configuration**:
+  - Added IP-based TURN URLs as primary option (more reliable on mobile networks)
+  - Domain-based URLs kept as secondary fallback
+  - ICE servers now include: IP UDP, IP TCP, Domain UDP, Domain TCP, and TURNS (TLS)
+- **TURN Server Infrastructure**:
+  - Self-hosted Coturn on AWS EC2 (IP: 43.205.187.5)
+  - Required Coturn config: `external-ip=43.205.187.5/172.31.6.8` (public/private IP pair for AWS NAT)
+  - Required ports: UDP/TCP 3478, TCP 5349 (TLS), UDP 49152-65535 (relay range)
+
+### December 4, 2025
 - **Fixed Critical Signaling Flow Issue**:
   - Root cause: Both sides were initiating connections simultaneously, causing race conditions
   - Fix: Only existing participants initiate to new joiners (new joiners wait for offers)
@@ -187,7 +201,7 @@ Key features include:
   - Connections requested before TURN is ready are queued and processed once ready
   - Queue only drains when both ICE servers and media stream are available
   - Prevents STUN-only connections that fail across networks
-- **Self-Hosted TURN Server**: Uses Coturn on AWS EC2 (turn.chunumunu.com) for reliable cross-network connectivity
+- **Self-Hosted TURN Server**: Uses Coturn on AWS EC2 for reliable cross-network connectivity
   - Credentials served securely via `/api/turn-credentials` endpoint
   - Supports UDP (port 3478), TCP (port 3478), and TLS (port 5349)
   - TURN credentials stored as Replit secrets: TURN_SERVER_URL, TURN_USERNAME, TURN_PASSWORD
