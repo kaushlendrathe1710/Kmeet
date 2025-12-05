@@ -523,7 +523,7 @@ export default function Room() {
     setVideoSettings(settings);
   };
 
-  // Dynamic ICE server configuration - fetched from Cloudflare for reliable TURN
+  // Dynamic ICE server configuration - fetched from server for secure TURN credentials
   const [iceServers, setIceServers] = useState<RTCIceServer[]>([
     { urls: "stun:stun.l.google.com:19302" },
     { urls: "stun:stun1.l.google.com:19302" },
@@ -531,58 +531,59 @@ export default function Room() {
   const iceServersRef = useRef<RTCIceServer[]>(iceServers);
   const [iceServersReady, setIceServersReady] = useState(false);
   const iceServersReadyRef = useRef(false);
+  const [hasTurnServer, setHasTurnServer] = useState(false);
   const pendingPeerConnectionsRef = useRef<Array<{ remoteId: string; initiator: boolean }>>([]);
   
-  // Configure TURN credentials on mount - using Open Relay Project (free, reliable)
+  // Fetch TURN credentials from server on mount
   useEffect(() => {
-    const setupIceServers = () => {
-      console.log("[WebRTC] Setting up ICE servers with TURN support...");
+    const fetchTurnCredentials = async () => {
+      console.log("[WebRTC] Fetching TURN server credentials from server...");
       
-      // Open Relay Project configuration (https://www.metered.ca/tools/openrelay/)
-      // This is a free, production-ready TURN service with 99.999% uptime
-      const iceServersConfig: RTCIceServer[] = [
-        // STUN servers for NAT traversal discovery
-        { urls: "stun:stun.l.google.com:19302" },
-        { urls: "stun:stun1.l.google.com:19302" },
-        { urls: "stun:openrelay.metered.ca:80" },
+      try {
+        const response = await fetch('/api/turn-credentials');
+        const data = await response.json();
         
-        // TURN servers for relay when direct connection fails (cross-network)
-        // UDP on port 80 - most likely to work through firewalls
-        {
-          urls: "turn:openrelay.metered.ca:80",
-          username: "openrelayproject",
-          credential: "openrelayproject",
-        },
-        // UDP on port 443 - fallback
-        {
-          urls: "turn:openrelay.metered.ca:443",
-          username: "openrelayproject",
-          credential: "openrelayproject",
-        },
-        // TCP on port 443 - works through most restrictive firewalls
-        {
-          urls: "turn:openrelay.metered.ca:443?transport=tcp",
-          username: "openrelayproject",
-          credential: "openrelayproject",
-        },
-        // TLS/TURNS on port 443 - encrypted relay for highest security
-        {
-          urls: "turns:openrelay.metered.ca:443",
-          username: "openrelayproject",
-          credential: "openrelayproject",
-        },
-      ];
+        if (data.iceServers && data.iceServers.length > 0) {
+          console.log("[WebRTC] ✅ Got ICE servers from server:", data.iceServers.length, "servers");
+          console.log("[WebRTC] Has TURN server:", data.hasTurn);
+          
+          // Log TURN servers for debugging
+          data.iceServers.forEach((server: RTCIceServer, index: number) => {
+            const urls = Array.isArray(server.urls) ? server.urls : [server.urls];
+            urls.forEach(url => {
+              if (url.startsWith('turn:') || url.startsWith('turns:')) {
+                console.log(`[WebRTC] TURN server ${index}: ${url}`);
+              }
+            });
+          });
+          
+          setIceServers(data.iceServers);
+          iceServersRef.current = data.iceServers;
+          setHasTurnServer(data.hasTurn);
+          
+          if (!data.hasTurn) {
+            console.warn("[WebRTC] ⚠️ No TURN server configured - cross-network calls may fail!");
+            toast({
+              title: "Limited Connectivity",
+              description: "No TURN server configured. Calls may not work across different networks.",
+              variant: "destructive",
+            });
+          }
+        } else {
+          console.warn("[WebRTC] No ICE servers returned from server, using defaults");
+        }
+      } catch (error) {
+        console.error("[WebRTC] Failed to fetch TURN credentials:", error);
+        // Continue with default STUN servers
+      }
       
-      console.log("[WebRTC] ✅ ICE servers configured with Open Relay Project TURN");
-      console.log("[WebRTC] TURN servers: openrelay.metered.ca (ports 80, 443, TCP, TLS)");
-      
-      setIceServers(iceServersConfig);
-      iceServersRef.current = iceServersConfig;
+      // Mark as ready regardless - we can still try with STUN only
       setIceServersReady(true);
       iceServersReadyRef.current = true;
+      console.log("[WebRTC] ICE servers ready, can now create peer connections");
     };
     
-    setupIceServers();
+    fetchTurnCredentials();
   }, []);
 
   // Helper to drain pending peer connections - called when both ICE servers and stream are ready

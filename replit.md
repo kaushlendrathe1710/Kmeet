@@ -187,7 +187,10 @@ Key features include:
   - Connections requested before TURN is ready are queued and processed once ready
   - Queue only drains when both ICE servers and media stream are available
   - Prevents STUN-only connections that fail across networks
-- **Reliable TURN Servers**: Uses Open Relay Project (openrelay.metered.ca) - a free, production-ready TURN service with 99.999% uptime on ports 80, 443, TCP, and TLS
+- **Self-Hosted TURN Server**: Uses Coturn on AWS EC2 (turn.chunumunu.com) for reliable cross-network connectivity
+  - Credentials served securely via `/api/turn-credentials` endpoint
+  - Supports UDP (port 3478), TCP (port 3478), and TLS (port 5349)
+  - TURN credentials stored as Replit secrets: TURN_SERVER_URL, TURN_USERNAME, TURN_PASSWORD
 - **Fixed Stale Connection Issue**: 
   - Connections that work once then fail on reconnect are now properly cleaned up
   - When creating a new connection, stale (failed/disconnected/closed) connections are automatically closed and replaced

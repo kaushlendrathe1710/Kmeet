@@ -12,6 +12,70 @@ interface WSClient extends WebSocket {
 export async function registerRoutes(app: Express): Promise<Server> {
   const httpServer = createServer(app);
   
+  // API endpoint to get TURN server credentials
+  // This keeps credentials secure on the server side
+  app.get('/api/turn-credentials', (req, res) => {
+    const turnServerUrl = process.env.TURN_SERVER_URL;
+    const turnUsername = process.env.TURN_USERNAME;
+    const turnPassword = process.env.TURN_PASSWORD;
+    
+    if (!turnServerUrl || !turnUsername || !turnPassword) {
+      console.log('[TURN] No custom TURN server configured, using fallback');
+      // Return fallback public STUN servers only
+      return res.json({
+        iceServers: [
+          { urls: "stun:stun.l.google.com:19302" },
+          { urls: "stun:stun1.l.google.com:19302" },
+        ],
+        hasTurn: false
+      });
+    }
+    
+    // Clean up the TURN URL - extract just the host:port
+    // Remove any protocol prefix and any embedded credentials
+    let cleanUrl = turnServerUrl;
+    
+    // Remove turn: or turns: prefix if present
+    cleanUrl = cleanUrl.replace(/^turns?:/, '');
+    
+    // Remove any embedded credentials in brackets like [user:pass]
+    cleanUrl = cleanUrl.replace(/\[.*?\]/g, '');
+    
+    // Extract just host:port (handle various formats)
+    const hostPortMatch = cleanUrl.match(/^([^/?]+)/);
+    const hostPort = hostPortMatch ? hostPortMatch[1] : cleanUrl;
+    
+    console.log(`[TURN] Serving credentials for turn:${hostPort}`);
+    
+    res.json({
+      iceServers: [
+        // STUN servers for direct connection discovery
+        { urls: "stun:stun.l.google.com:19302" },
+        { urls: "stun:stun1.l.google.com:19302" },
+        
+        // Your self-hosted Coturn TURN server - UDP (default, fastest)
+        {
+          urls: `turn:${hostPort}`,
+          username: turnUsername,
+          credential: turnPassword,
+        },
+        // TCP fallback (works through more firewalls)
+        {
+          urls: `turn:${hostPort}?transport=tcp`,
+          username: turnUsername,
+          credential: turnPassword,
+        },
+        // TLS/TURNS if your Coturn supports it (port 5349 typically)
+        {
+          urls: `turns:${hostPort.replace(':3478', ':5349')}`,
+          username: turnUsername,
+          credential: turnPassword,
+        },
+      ],
+      hasTurn: true
+    });
+  });
+  
   const wss = new WebSocketServer({ server: httpServer, path: '/ws' });
 
   const clients = new Map<string, WSClient>();
