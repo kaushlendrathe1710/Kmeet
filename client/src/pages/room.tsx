@@ -2541,6 +2541,21 @@ export default function Room() {
     screenStream?.getTracks().forEach((track) => track.stop());
     setScreenStream(null);
 
+    // Replace screen track with camera track in all peer connections
+    const cameraTrack = getOutboundStream()?.getVideoTracks()[0];
+    if (cameraTrack) {
+      peersRef.current.forEach((peerData, peerId) => {
+        const pc = peerData.pc as RTCPeerConnection;
+        const senders = pc.getSenders();
+        senders.forEach((sender) => {
+          if (sender.track?.kind === "video") {
+            console.log(`📷 Restoring camera track for peer ${peerId}`);
+            sender.replaceTrack(cameraTrack.clone());
+          }
+        });
+      });
+    }
+
     wsRef.current?.send(
       JSON.stringify({
         type: "screen-share",
@@ -2576,6 +2591,21 @@ export default function Room() {
         setScreenStream(stream);
         setIsScreenSharing(true);
         isScreenSharingRef.current = true;
+
+        // Replace camera video track with screen track in all peer connections
+        const screenVideoTrack = stream.getVideoTracks()[0];
+        if (screenVideoTrack) {
+          peersRef.current.forEach((peerData, peerId) => {
+            const pc = peerData.pc as RTCPeerConnection;
+            const senders = pc.getSenders();
+            senders.forEach((sender) => {
+              if (sender.track?.kind === "video") {
+                console.log(`🖥️ Replacing with screen track for peer ${peerId}`);
+                sender.replaceTrack(screenVideoTrack.clone());
+              }
+            });
+          });
+        }
 
         wsRef.current?.send(
           JSON.stringify({

@@ -175,7 +175,14 @@ Key features include:
 
 ## Recent Changes
 
-### December 5, 2025 (Latest)
+### December 6, 2025 (Latest)
+- **Fixed Screen Sharing to Broadcast to Participants**:
+  - Issue: Screen was captured locally but not sent to other participants
+  - Fix: Screen track now replaces camera track in all peer connections via `replaceTrack()`
+  - When stopping: Camera track restored to all peer connections
+  - Works seamlessly with existing WebSocket screen-share notifications
+
+### December 5, 2025
 - **Fixed Audio Not Playing for Remote Participants**:
   - Issue: Video element was only rendered when video was enabled, preventing audio playback
   - Fix: Video element now always renders when stream exists (hidden when video disabled)
