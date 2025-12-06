@@ -105,7 +105,7 @@ export default function Home() {
 
     if (isVideoEnabled) {
       // TURN OFF: Stop camera hardware
-      stream.getVideoTracks().forEach(track => track.stop());
+      stream.getVideoTracks().forEach((track) => track.stop());
       if (videoRef.current) videoRef.current.srcObject = null;
       setIsVideoEnabled(false);
       console.log("Camera OFF");
@@ -116,14 +116,21 @@ export default function Home() {
           video: selectedVideo ? { deviceId: { exact: selectedVideo } } : true,
         });
         const newVideoTrack = newStream.getVideoTracks()[0];
-        const combined = new MediaStream([newVideoTrack, ...stream.getAudioTracks()]);
+        const combined = new MediaStream([
+          newVideoTrack,
+          ...stream.getAudioTracks(),
+        ]);
         setStream(combined);
         if (videoRef.current) videoRef.current.srcObject = combined;
         setIsVideoEnabled(true);
         console.log("Camera ON");
       } catch (err) {
         console.error("Camera error:", err);
-        toast({ title: "Camera Error", description: "Cannot access camera.", variant: "destructive" });
+        toast({
+          title: "Camera Error",
+          description: "Cannot access camera.",
+          variant: "destructive",
+        });
       }
     }
   };
@@ -133,7 +140,7 @@ export default function Home() {
 
     if (isAudioEnabled) {
       // TURN OFF: Stop microphone hardware
-      stream.getAudioTracks().forEach(track => track.stop());
+      stream.getAudioTracks().forEach((track) => track.stop());
       setIsAudioEnabled(false);
       console.log("Microphone OFF");
     } else {
@@ -143,14 +150,21 @@ export default function Home() {
           audio: selectedAudio ? { deviceId: { exact: selectedAudio } } : true,
         });
         const newAudioTrack = newStream.getAudioTracks()[0];
-        const combined = new MediaStream([...stream.getVideoTracks(), newAudioTrack]);
+        const combined = new MediaStream([
+          ...stream.getVideoTracks(),
+          newAudioTrack,
+        ]);
         setStream(combined);
         if (videoRef.current) videoRef.current.srcObject = combined;
         setIsAudioEnabled(true);
         console.log("Microphone ON");
       } catch (err) {
         console.error("Microphone error:", err);
-        toast({ title: "Microphone Error", description: "Cannot access microphone.", variant: "destructive" });
+        toast({
+          title: "Microphone Error",
+          description: "Cannot access microphone.",
+          variant: "destructive",
+        });
       }
     }
   };

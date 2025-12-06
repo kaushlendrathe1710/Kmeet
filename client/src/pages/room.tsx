@@ -2972,24 +2972,28 @@ export default function Room() {
   return (
     <div
       ref={roomContainerRef}
-      className="h-screen flex flex-col bg-background"
+      className="h-screen flex flex-col bg-background overflow-hidden"
     >
-      <header className="h-16 border-b flex items-center justify-between px-6">
-        <div className="flex items-center gap-4">
-          <h1 className="text-xl font-semibold" data-testid="text-room-name">
+      {/* Fixed Header */}
+      <header className="h-14 sm:h-16 border-b flex items-center justify-between px-3 sm:px-6 flex-shrink-0 bg-background z-10">
+        <div className="flex items-center gap-2 sm:gap-4 overflow-hidden">
+          <h1
+            className="text-base sm:text-xl font-semibold truncate"
+            data-testid="text-room-name"
+          >
             Room: {roomId}
           </h1>
           <span
-            className="text-sm text-muted-foreground font-mono"
+            className="text-xs sm:text-sm text-muted-foreground font-mono hidden xs:inline"
             data-testid="text-duration"
           >
             {formatDuration(duration)}
           </span>
           {isRecording && (
-            <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-destructive/10 border border-destructive">
-              <Radio className="h-3 w-3 text-destructive animate-pulse" />
+            <div className="flex items-center gap-1 sm:gap-2 px-2 sm:px-3 py-1 rounded-full bg-destructive/10 border border-destructive">
+              <Radio className="h-2 w-2 sm:h-3 sm:w-3 text-destructive animate-pulse" />
               <span
-                className="text-xs font-medium text-destructive"
+                className="text-[10px] sm:text-xs font-medium text-destructive"
                 data-testid="text-recording-indicator"
               >
                 REC
@@ -2997,10 +3001,10 @@ export default function Room() {
             </div>
           )}
           {isReconnecting && (
-            <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-yellow-500/10 border border-yellow-500">
+            <div className="flex items-center gap-1 sm:gap-2 px-2 sm:px-3 py-1 rounded-full bg-yellow-500/10 border border-yellow-500">
               <div className="h-2 w-2 rounded-full bg-yellow-500 animate-pulse" />
               <span
-                className="text-xs font-medium text-yellow-600 dark:text-yellow-500"
+                className="text-[10px] sm:text-xs font-medium text-yellow-600 dark:text-yellow-500"
                 data-testid="text-reconnecting-indicator"
               >
                 Reconnecting...
@@ -3008,33 +3012,37 @@ export default function Room() {
             </div>
           )}
           {!isReconnecting && participants.length > 1 && (
-            <NetworkQualityIndicator
-              quality={networkStats.quality}
-              packetLoss={networkStats.packetLoss}
-              latency={networkStats.latency}
-              showDetails={false}
-            />
+            <div className="hidden sm:block">
+              <NetworkQualityIndicator
+                quality={networkStats.quality}
+                packetLoss={networkStats.packetLoss}
+                latency={networkStats.latency}
+                showDetails={false}
+              />
+            </div>
           )}
           <Button
             variant="outline"
             size="sm"
             onClick={copyRoomLink}
-            className="gap-2"
+            className="gap-1 sm:gap-2 h-7 sm:h-8 px-2 sm:px-3 text-xs sm:text-sm"
             data-testid="button-copy-link"
           >
             {linkCopied ? (
-              <Check className="w-4 h-4" />
+              <Check className="w-3 h-3 sm:w-4 sm:h-4" />
             ) : (
-              <Copy className="w-4 h-4" />
+              <Copy className="w-3 h-3 sm:w-4 sm:h-4" />
             )}
-            {linkCopied ? "Copied!" : "Copy Link"}
+            <span className="hidden xs:inline">
+              {linkCopied ? "Copied!" : "Copy Link"}
+            </span>
           </Button>
         </div>
 
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-2 sm:gap-4">
           {isRecording && (
             <div
-              className="flex items-center gap-2 text-destructive"
+              className="hidden sm:flex items-center gap-2 text-destructive"
               data-testid="indicator-recording"
             >
               <Radio className="w-4 h-4 animate-pulse-recording" />
@@ -3042,65 +3050,73 @@ export default function Room() {
             </div>
           )}
           <span
-            className="text-sm text-muted-foreground"
+            className="text-xs sm:text-sm text-muted-foreground whitespace-nowrap"
             data-testid="text-participant-count"
           >
-            {participants.length} participant
-            {participants.length !== 1 ? "s" : ""}
+            <span className="hidden xs:inline">
+              {participants.length} participant
+              {participants.length !== 1 ? "s" : ""}
+            </span>
+            <span className="xs:hidden">{participants.length}</span>
           </span>
         </div>
       </header>
 
+      {/* Scrollable Middle Section */}
       <div className="flex-1 flex overflow-hidden min-h-0">
         <div className="flex-1 flex flex-col min-w-0 min-h-0">
-          <div className="flex-1 min-h-0 overflow-hidden">
-            <VideoGrid
-              participants={approvedParticipants}
-              localStream={
-                backgroundProcessedStream || processedStream || localStream
-              }
-              screenStream={screenStream}
-              currentParticipantId={participantId}
-              videoSettings={videoSettings}
-              remoteStreams={remoteStreams}
-              hideSelfView={hideSelfView}
-              peers={peersRef.current}
-              viewMode={viewMode}
-              pinnedParticipantId={pinnedParticipantId}
-              onTogglePin={(id) =>
-                setPinnedParticipantId((prev) => (prev === id ? null : id))
-              }
-              spotlightedParticipantId={spotlightedParticipantId}
-              gridColumns={gridColumns}
-              onToggleSpotlight={(id) => {
-                if (!isHost) return;
-                wsRef.current?.send(
-                  JSON.stringify({
-                    type: "spotlight-participant",
-                    roomId,
-                    participantId,
-                    targetParticipantId:
-                      spotlightedParticipantId === id ? null : id,
-                  })
-                );
-              }}
-              isHost={isHost}
-            />
+          {/* Video Grid - Scrollable */}
+          <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden">
+            <div className="h-full p-2 sm:p-4">
+              <VideoGrid
+                participants={approvedParticipants}
+                localStream={
+                  backgroundProcessedStream || processedStream || localStream
+                }
+                screenStream={screenStream}
+                currentParticipantId={participantId}
+                videoSettings={videoSettings}
+                remoteStreams={remoteStreams}
+                hideSelfView={hideSelfView}
+                peers={peersRef.current}
+                viewMode={viewMode}
+                pinnedParticipantId={pinnedParticipantId}
+                onTogglePin={(id) =>
+                  setPinnedParticipantId((prev) => (prev === id ? null : id))
+                }
+                spotlightedParticipantId={spotlightedParticipantId}
+                gridColumns={gridColumns}
+                onToggleSpotlight={(id) => {
+                  if (!isHost) return;
+                  wsRef.current?.send(
+                    JSON.stringify({
+                      type: "spotlight-participant",
+                      roomId,
+                      participantId,
+                      targetParticipantId:
+                        spotlightedParticipantId === id ? null : id,
+                    })
+                  );
+                }}
+                isHost={isHost}
+              />
+            </div>
           </div>
 
-          <div className="h-16 border-t bg-card/50 backdrop-blur-sm flex items-center justify-center px-4">
+          {/* Fixed Controls Bar */}
+          <div className="py-2 border-t bg-card/50 backdrop-blur-sm flex items-center justify-center px-2 sm:px-4 flex-shrink-0 z-10">
             <div className="flex items-center gap-1 flex-wrap justify-center">
               <Button
                 size="icon"
                 variant={isAudioEnabled ? "default" : "destructive"}
                 onClick={toggleAudio}
-                className="rounded-full w-10 h-10"
+                className="rounded-full w-8 h-8 sm:w-10 sm:h-10"
                 data-testid="button-toggle-audio"
               >
                 {isAudioEnabled ? (
-                  <Mic className="w-4 h-4" />
+                  <Mic className="w-3 h-3 sm:w-4 sm:h-4" />
                 ) : (
-                  <MicOff className="w-4 h-4" />
+                  <MicOff className="w-3 h-3 sm:w-4 sm:h-4" />
                 )}
               </Button>
 
@@ -3108,13 +3124,13 @@ export default function Room() {
                 size="icon"
                 variant={isVideoEnabled ? "default" : "destructive"}
                 onClick={toggleVideo}
-                className="rounded-full w-10 h-10"
+                className="rounded-full w-8 h-8 sm:w-10 sm:h-10"
                 data-testid="button-toggle-video"
               >
                 {isVideoEnabled ? (
-                  <Video className="w-4 h-4" />
+                  <Video className="w-3 h-3 sm:w-4 sm:h-4" />
                 ) : (
-                  <VideoOff className="w-4 h-4" />
+                  <VideoOff className="w-3 h-3 sm:w-4 sm:h-4" />
                 )}
               </Button>
 
@@ -3122,13 +3138,13 @@ export default function Room() {
                 size="icon"
                 variant={isScreenSharing ? "default" : "secondary"}
                 onClick={toggleScreenShare}
-                className="rounded-full w-10 h-10"
+                className="rounded-full w-8 h-8 sm:w-10 sm:h-10"
                 data-testid="button-toggle-screen"
               >
                 {isScreenSharing ? (
-                  <MonitorOff className="w-4 h-4" />
+                  <MonitorOff className="w-3 h-3 sm:w-4 sm:h-4" />
                 ) : (
-                  <Monitor className="w-4 h-4" />
+                  <Monitor className="w-3 h-3 sm:w-4 sm:h-4" />
                 )}
               </Button>
 
@@ -3136,10 +3152,10 @@ export default function Room() {
                 size="icon"
                 variant={handRaised ? "default" : "secondary"}
                 onClick={toggleHandRaise}
-                className="rounded-full w-10 h-10"
+                className="rounded-full w-8 h-8 sm:w-10 sm:h-10 hidden xs:flex"
                 data-testid="button-raise-hand"
               >
-                <Hand className="w-4 h-4" />
+                <Hand className="w-3 h-3 sm:w-4 sm:h-4" />
               </Button>
 
               <DropdownMenu>
@@ -3147,10 +3163,10 @@ export default function Room() {
                   <Button
                     size="icon"
                     variant="secondary"
-                    className="rounded-full w-10 h-10"
+                    className="rounded-full w-8 h-8 sm:w-10 sm:h-10 hidden xs:flex"
                     data-testid="button-reactions"
                   >
-                    <Smile className="w-4 h-4" />
+                    <Smile className="w-3 h-3 sm:w-4 sm:h-4" />
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent>
@@ -3213,63 +3229,63 @@ export default function Room() {
                   stream={processedStream || localStream}
                   width={200}
                   height={40}
-                  className="mx-2"
+                  className="mx-2 hidden sm:block"
                 />
               )}
 
-              <div className="w-px h-8 bg-border mx-2" />
+              <div className="w-px h-6 sm:h-8 bg-border mx-1 sm:mx-2 hidden xs:block" />
 
               <Button
                 size="icon"
                 variant={showChat ? "default" : "secondary"}
                 onClick={() => setShowChat(!showChat)}
-                className="rounded-full w-10 h-10"
+                className="rounded-full w-8 h-8 sm:w-10 sm:h-10"
                 data-testid="button-toggle-chat"
               >
-                <MessageSquare className="w-4 h-4" />
+                <MessageSquare className="w-3 h-3 sm:w-4 sm:h-4" />
               </Button>
 
               <Button
                 size="icon"
                 variant={showParticipants ? "default" : "secondary"}
                 onClick={() => setShowParticipants(!showParticipants)}
-                className="rounded-full w-10 h-10"
+                className="rounded-full w-8 h-8 sm:w-10 sm:h-10"
                 data-testid="button-toggle-participants"
               >
-                <Users className="w-4 h-4" />
+                <Users className="w-3 h-3 sm:w-4 sm:h-4" />
               </Button>
 
               {/* View Mode Toggle - cycles through grid -> speaker -> self */}
-              <div className="flex gap-0.5 bg-muted rounded-full p-0.5">
+              <div className="hidden xs:flex gap-0.5 bg-muted rounded-full p-0.5">
                 <Button
                   size="icon"
                   variant={viewMode === "grid" ? "default" : "ghost"}
                   onClick={() => setViewMode("grid")}
-                  className="rounded-full w-8 h-8"
+                  className="rounded-full w-6 h-6 sm:w-8 sm:h-8"
                   data-testid="button-view-grid"
                   title="Equal Grid View (G)"
                 >
-                  <LayoutGrid className="w-3.5 h-3.5" />
+                  <LayoutGrid className="w-2.5 h-2.5 sm:w-3.5 sm:h-3.5" />
                 </Button>
                 <Button
                   size="icon"
                   variant={viewMode === "speaker" ? "default" : "ghost"}
                   onClick={() => setViewMode("speaker")}
-                  className="rounded-full w-8 h-8"
+                  className="rounded-full w-6 h-6 sm:w-8 sm:h-8"
                   data-testid="button-view-speaker"
                   title="Speaker View (B)"
                 >
-                  <UserCircle className="w-3.5 h-3.5" />
+                  <UserCircle className="w-2.5 h-2.5 sm:w-3.5 sm:h-3.5" />
                 </Button>
                 <Button
                   size="icon"
                   variant={viewMode === "self" ? "default" : "ghost"}
                   onClick={() => setViewMode("self")}
-                  className="rounded-full w-8 h-8"
+                  className="rounded-full w-6 h-6 sm:w-8 sm:h-8"
                   data-testid="button-view-self"
                   title="Self View Only (L)"
                 >
-                  <User className="w-3.5 h-3.5" />
+                  <User className="w-2.5 h-2.5 sm:w-3.5 sm:h-3.5" />
                 </Button>
               </div>
 
@@ -3277,16 +3293,16 @@ export default function Room() {
                 size="icon"
                 variant={isFullscreen ? "default" : "secondary"}
                 onClick={toggleFullscreen}
-                className="rounded-full w-10 h-10"
+                className="rounded-full w-8 h-8 sm:w-10 sm:h-10 hidden xs:flex"
                 data-testid="button-toggle-fullscreen"
                 title={
                   isFullscreen ? "Exit Fullscreen (F)" : "Enter Fullscreen (F)"
                 }
               >
                 {isFullscreen ? (
-                  <Minimize className="w-4 h-4" />
+                  <Minimize className="w-3 h-3 sm:w-4 sm:h-4" />
                 ) : (
-                  <Maximize className="w-4 h-4" />
+                  <Maximize className="w-3 h-3 sm:w-4 sm:h-4" />
                 )}
               </Button>
 
@@ -3294,10 +3310,10 @@ export default function Room() {
                 size="icon"
                 variant={showSettings ? "default" : "secondary"}
                 onClick={() => setShowSettings(!showSettings)}
-                className="rounded-full w-10 h-10"
+                className="rounded-full w-8 h-8 sm:w-10 sm:h-10"
                 data-testid="button-toggle-settings"
               >
-                <Settings className="w-4 h-4" />
+                <Settings className="w-3 h-3 sm:w-4 sm:h-4" />
               </Button>
 
               <Button
@@ -3306,25 +3322,25 @@ export default function Room() {
                 onClick={() =>
                   setShowBackgroundControls(!showBackgroundControls)
                 }
-                className="rounded-full w-10 h-10"
+                className="rounded-full w-8 h-8 sm:w-10 sm:h-10 hidden xs:flex"
                 data-testid="button-toggle-background"
                 title="Background Effects"
               >
-                <Wand2 className="w-4 h-4" />
+                <Wand2 className="w-3 h-3 sm:w-4 sm:h-4" />
               </Button>
 
               <Button
                 size="icon"
                 variant={showFileSharing ? "default" : "secondary"}
                 onClick={() => setShowFileSharing(!showFileSharing)}
-                className="rounded-full w-10 h-10"
+                className="rounded-full w-8 h-8 sm:w-10 sm:h-10 hidden xs:flex"
                 data-testid="button-toggle-files"
                 title="File Sharing"
               >
-                <FileUp className="w-4 h-4" />
+                <FileUp className="w-3 h-3 sm:w-4 sm:h-4" />
               </Button>
 
-              <div className="rounded-full overflow-hidden">
+              <div className="rounded-full overflow-hidden hidden sm:block">
                 <QualitySelector
                   currentQuality={videoQuality}
                   recommendedQuality={bandwidthStats.recommendedQuality}
@@ -3333,10 +3349,12 @@ export default function Room() {
                 />
               </div>
 
-              <PresetSelector
-                currentPreset={currentPreset}
-                onPresetChange={handlePresetChange}
-              />
+              <div className="hidden sm:block">
+                <PresetSelector
+                  currentPreset={currentPreset}
+                  onPresetChange={handlePresetChange}
+                />
+              </div>
 
               {isHost && (
                 <div className="relative">
@@ -3344,15 +3362,15 @@ export default function Room() {
                     size="icon"
                     variant={showJoinRequests ? "default" : "secondary"}
                     onClick={() => setShowJoinRequests(!showJoinRequests)}
-                    className="rounded-full w-10 h-10"
+                    className="rounded-full w-8 h-8 sm:w-10 sm:h-10 hidden xs:flex"
                     data-testid="button-toggle-requests"
                   >
-                    <UserPlus className="w-4 h-4" />
+                    <UserPlus className="w-3 h-3 sm:w-4 sm:h-4" />
                   </Button>
                   {pendingParticipants.length > 0 && (
                     <Badge
                       variant="destructive"
-                      className="absolute -top-1 -right-1 h-4 w-4 flex items-center justify-center p-0 text-xs"
+                      className="absolute -top-1 -right-1 h-3 w-3 sm:h-4 sm:w-4 flex items-center justify-center p-0 text-[10px] sm:text-xs"
                       data-testid="badge-pending-count"
                     >
                       {pendingParticipants.length}
@@ -3366,14 +3384,14 @@ export default function Room() {
                   size="icon"
                   variant={isRoomLocked ? "default" : "secondary"}
                   onClick={toggleRoomLock}
-                  className="rounded-full w-10 h-10"
+                  className="rounded-full w-8 h-8 sm:w-10 sm:h-10 hidden xs:flex"
                   data-testid="button-toggle-lock"
                   title={isRoomLocked ? "Unlock Room" : "Lock Room"}
                 >
                   {isRoomLocked ? (
-                    <Lock className="w-4 h-4" />
+                    <Lock className="w-3 h-3 sm:w-4 sm:h-4" />
                   ) : (
-                    <LockOpen className="w-4 h-4" />
+                    <LockOpen className="w-3 h-3 sm:w-4 sm:h-4" />
                   )}
                 </Button>
               )}
@@ -3385,21 +3403,21 @@ export default function Room() {
                     size="icon"
                     variant="secondary"
                     onClick={() => setShowTransferHost(true)}
-                    className="rounded-full w-10 h-10"
+                    className="rounded-full w-8 h-8 sm:w-10 sm:h-10 hidden xs:flex"
                     data-testid="button-transfer-host"
                     title="Transfer Host"
                   >
-                    <ArrowRightLeft className="w-4 h-4" />
+                    <ArrowRightLeft className="w-3 h-3 sm:w-4 sm:h-4" />
                   </Button>
                 )}
 
-              <div className="w-px h-6 bg-border mx-1" />
+              <div className="w-px h-6 bg-border mx-1 hidden sm:block" />
 
               <Button
                 size="icon"
                 variant="destructive"
                 onClick={leaveRoom}
-                className="rounded-full w-10 h-10"
+                className="rounded-full w-9 h-9 sm:w-10 sm:h-10"
                 data-testid="button-leave-room"
               >
                 <Phone className="w-4 h-4" />
