@@ -98,6 +98,7 @@ export default function Room() {
   const [isAudioEnabled, setIsAudioEnabled] = useState(true);
   const [isVideoEnabled, setIsVideoEnabled] = useState(true);
   const [isScreenSharing, setIsScreenSharing] = useState(false);
+  const [screenShareMode, setScreenShareMode] = useState<"screen-only" | "screen-and-camera">("screen-and-camera");
   const [isRecording, setIsRecording] = useState(false);
   const [canRecord, setCanRecord] = useState(false);
   const [showChat, setShowChat] = useState(false);
@@ -176,6 +177,10 @@ export default function Room() {
   const [remoteStreams, setRemoteStreams] = useState<Map<string, MediaStream>>(
     new Map()
   );
+  const [remoteScreenStreams, setRemoteScreenStreams] = useState<Map<string, MediaStream>>(
+    new Map()
+  );
+  const [screenSharingParticipantId, setScreenSharingParticipantId] = useState<string | null>(null);
 
   const wsRef = useRef<WebSocket | null>(null);
   const peersRef = useRef<Map<string, any>>(new Map());
@@ -1972,6 +1977,7 @@ export default function Room() {
           )
         );
         if (message.isSharing) {
+          setScreenSharingParticipantId(message.participantId);
           const participant = participants.find(
             (p) => p.id === message.participantId
           );
@@ -1981,6 +1987,8 @@ export default function Room() {
               description: `${participant.name} is now sharing their screen`,
             });
           }
+        } else {
+          setScreenSharingParticipantId(null);
         }
         break;
 
@@ -2540,6 +2548,7 @@ export default function Room() {
     setIsScreenSharing(false);
     screenStream?.getTracks().forEach((track) => track.stop());
     setScreenStream(null);
+    setScreenSharingParticipantId(null);
 
     // Replace screen track with camera track in all peer connections
     const cameraTrack = getOutboundStream()?.getVideoTracks()[0];
@@ -2562,6 +2571,7 @@ export default function Room() {
         roomId,
         participantId,
         isSharing: false,
+        mode: screenShareMode,
       })
     );
 
@@ -2574,68 +2584,78 @@ export default function Room() {
     });
   };
 
+  const startScreenShare = async (mode: "screen-only" | "screen-and-camera") => {
+    try {
+      const stream = await navigator.mediaDevices.getDisplayMedia({
+        video: {
+          width: { ideal: 1920 },
+          height: { ideal: 1080 },
+          frameRate: { ideal: 30 },
+        },
+        audio: true,
+      });
+
+      setScreenStream(stream);
+      setIsScreenSharing(true);
+      setScreenShareMode(mode);
+      setScreenSharingParticipantId(participantId);
+      isScreenSharingRef.current = true;
+
+      // Replace camera video track with screen track in all peer connections
+      const screenVideoTrack = stream.getVideoTracks()[0];
+      if (screenVideoTrack) {
+        peersRef.current.forEach((peerData, peerId) => {
+          const pc = peerData.pc as RTCPeerConnection;
+          const senders = pc.getSenders();
+          senders.forEach((sender) => {
+            if (sender.track?.kind === "video") {
+              console.log(`🖥️ Replacing with screen track for peer ${peerId}`);
+              sender.replaceTrack(screenVideoTrack.clone());
+            }
+          });
+        });
+      }
+
+      wsRef.current?.send(
+        JSON.stringify({
+          type: "screen-share",
+          roomId,
+          participantId,
+          isSharing: true,
+          mode: mode,
+        })
+      );
+
+      stream.getVideoTracks()[0].onended = () => {
+        if (isScreenSharingRef.current) {
+          stopScreenShare("browser");
+        }
+      };
+
+      toast({
+        title: "Screen Sharing Started",
+        description: mode === "screen-only" 
+          ? "Sharing screen only" 
+          : "Sharing screen with camera visible",
+      });
+    } catch (error) {
+      console.error("Error sharing screen:", error);
+      if ((error as Error).name !== "NotAllowedError") {
+        toast({
+          title: "Screen Share Failed",
+          description: "Could not start screen sharing",
+          variant: "destructive",
+        });
+      }
+    }
+  };
+
   const toggleScreenShare = async () => {
     if (isScreenSharing) {
       stopScreenShare("manual");
     } else {
-      try {
-        const stream = await navigator.mediaDevices.getDisplayMedia({
-          video: {
-            width: { ideal: 1920 },
-            height: { ideal: 1080 },
-            frameRate: { ideal: 30 },
-          },
-          audio: true,
-        });
-
-        setScreenStream(stream);
-        setIsScreenSharing(true);
-        isScreenSharingRef.current = true;
-
-        // Replace camera video track with screen track in all peer connections
-        const screenVideoTrack = stream.getVideoTracks()[0];
-        if (screenVideoTrack) {
-          peersRef.current.forEach((peerData, peerId) => {
-            const pc = peerData.pc as RTCPeerConnection;
-            const senders = pc.getSenders();
-            senders.forEach((sender) => {
-              if (sender.track?.kind === "video") {
-                console.log(`🖥️ Replacing with screen track for peer ${peerId}`);
-                sender.replaceTrack(screenVideoTrack.clone());
-              }
-            });
-          });
-        }
-
-        wsRef.current?.send(
-          JSON.stringify({
-            type: "screen-share",
-            roomId,
-            participantId,
-            isSharing: true,
-          })
-        );
-
-        stream.getVideoTracks()[0].onended = () => {
-          if (isScreenSharingRef.current) {
-            stopScreenShare("browser");
-          }
-        };
-
-        toast({
-          title: "Screen Sharing Started",
-          description: "You are now sharing your screen",
-        });
-      } catch (error) {
-        console.error("Error sharing screen:", error);
-        if ((error as Error).name !== "NotAllowedError") {
-          toast({
-            title: "Screen Share Failed",
-            description: "Could not start screen sharing",
-            variant: "destructive",
-          });
-        }
-      }
+      // Default to screen-and-camera mode (will be selectable via UI)
+      await startScreenShare(screenShareMode);
     }
   };
 
@@ -3129,6 +3149,9 @@ export default function Room() {
                   );
                 }}
                 isHost={isHost}
+                screenSharingParticipantId={screenSharingParticipantId}
+                screenShareMode={screenShareMode}
+                isLocalScreenSharing={isScreenSharing}
               />
             </div>
           </div>
@@ -3164,19 +3187,46 @@ export default function Room() {
                 )}
               </Button>
 
-              <Button
-                size="icon"
-                variant={isScreenSharing ? "default" : "secondary"}
-                onClick={toggleScreenShare}
-                className="rounded-full w-8 h-8 sm:w-10 sm:h-10"
-                data-testid="button-toggle-screen"
-              >
-                {isScreenSharing ? (
+              {isScreenSharing ? (
+                <Button
+                  size="icon"
+                  variant="default"
+                  onClick={() => stopScreenShare("manual")}
+                  className="rounded-full w-8 h-8 sm:w-10 sm:h-10"
+                  data-testid="button-stop-screen"
+                >
                   <MonitorOff className="w-3 h-3 sm:w-4 sm:h-4" />
-                ) : (
-                  <Monitor className="w-3 h-3 sm:w-4 sm:h-4" />
-                )}
-              </Button>
+                </Button>
+              ) : (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      size="icon"
+                      variant="secondary"
+                      className="rounded-full w-8 h-8 sm:w-10 sm:h-10"
+                      data-testid="button-toggle-screen"
+                    >
+                      <Monitor className="w-3 h-3 sm:w-4 sm:h-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent>
+                    <DropdownMenuItem
+                      onClick={() => startScreenShare("screen-and-camera")}
+                      data-testid="screen-share-with-camera"
+                    >
+                      <Monitor className="w-4 h-4 mr-2" />
+                      <span>Share Screen + Camera</span>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onClick={() => startScreenShare("screen-only")}
+                      data-testid="screen-share-only"
+                    >
+                      <Monitor className="w-4 h-4 mr-2" />
+                      <span>Share Screen Only</span>
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              )}
 
               <Button
                 size="icon"

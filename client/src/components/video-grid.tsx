@@ -7,6 +7,7 @@ import {
   PinOff,
   AlertTriangle,
   Zap,
+  Monitor,
 } from "lucide-react";
 import { applyVideoFilters } from "@/lib/media-processor";
 import type { Participant } from "@shared/schema";
@@ -39,6 +40,9 @@ interface VideoGridProps {
   onToggleSpotlight?: (participantId: string) => void;
   isHost?: boolean;
   gridColumns?: 2 | 3 | 4;
+  screenSharingParticipantId?: string | null;
+  screenShareMode?: "screen-only" | "screen-and-camera";
+  isLocalScreenSharing?: boolean;
 }
 
 export function VideoGrid({
@@ -57,6 +61,9 @@ export function VideoGrid({
   onToggleSpotlight,
   isHost = false,
   gridColumns = 3,
+  screenSharingParticipantId,
+  screenShareMode = "screen-and-camera",
+  isLocalScreenSharing = false,
 }: VideoGridProps) {
   const [participantLevels, setParticipantLevels] = useState<
     ParticipantAudioLevel[]
@@ -175,9 +182,57 @@ export function VideoGrid({
     );
   }
 
-  // Render grid view - equal division podcast layout
+  // Find the screen sharer's name
+  const screenSharerName = screenSharingParticipantId 
+    ? participants.find(p => p.id === screenSharingParticipantId)?.name || "Screen"
+    : isLocalScreenSharing 
+      ? participants.find(p => p.id === currentParticipantId)?.name || "Your Screen"
+      : "Screen";
+
+  // Determine if we should show screen as featured (large) layout
+  const hasScreenShare = screenStream || screenSharingParticipantId;
+  
+  // Render grid view with screen share - Google Meet style
+  if (viewMode === "grid" && hasScreenShare) {
+    // When screen sharing, show screen prominently with participants below
+    return (
+      <div className="flex flex-col h-full w-full gap-2" data-testid="video-grid">
+        {/* Featured screen share area - takes most of the space */}
+        <div className="flex-1 min-h-0">
+          {screenStream ? (
+            <ScreenShareTile
+              stream={screenStream}
+              sharerName={screenSharerName}
+              isLocal={isLocalScreenSharing}
+            />
+          ) : screenSharingParticipantId ? (
+            // Remote screen share - the video track is already replaced, so show the remote stream
+            <ScreenShareTile
+              stream={remoteStreams?.get(screenSharingParticipantId) || null}
+              sharerName={screenSharerName}
+              isLocal={false}
+            />
+          ) : null}
+        </div>
+
+        {/* Participants strip at the bottom - small tiles */}
+        <div className="h-28 sm:h-36 flex gap-2 overflow-x-auto flex-shrink-0">
+          {visibleParticipants.map((participant) => (
+            <div
+              key={participant.id}
+              className="h-full aspect-video flex-shrink-0"
+            >
+              {renderVideoTile(participant, "small")}
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  // Render grid view - equal division podcast layout (no screen share)
   if (viewMode === "grid") {
-    const count = visibleParticipants.length + (screenStream ? 1 : 0);
+    const count = visibleParticipants.length;
     // Calculate rows needed for proper layout
     const rows =
       count <= 3 ? 1 : count <= 6 ? 2 : count <= 9 ? 3 : Math.ceil(count / 4);
@@ -188,28 +243,6 @@ export function VideoGrid({
         style={{ gridTemplateRows: `repeat(${rows}, 1fr)` }}
         data-testid="video-grid"
       >
-        {screenStream && (
-          <VideoTile
-            participant={{
-              id: "screen",
-              name: "Screen Share",
-              roomId: "",
-              isAudioEnabled: false,
-              isVideoEnabled: true,
-              isScreenSharing: true,
-              isHost: false,
-              approvalStatus: "approved",
-              handRaised: false,
-              canRecord: false,
-              joinedAt: Date.now(),
-            }}
-            stream={screenStream}
-            isSelf={false}
-            isActiveSpeaker={false}
-            onAudioLevelChange={handleAudioLevelChange}
-          />
-        )}
-
         {visibleParticipants.map((participant) => renderVideoTile(participant))}
       </div>
     );
@@ -223,27 +256,20 @@ export function VideoGrid({
     >
       {/* Main speaker area - prioritize screen share if active */}
       <div className="flex-1 min-h-0">
-        {screenStream ? (
-          <VideoTile
-            participant={{
-              id: "screen",
-              name: "Screen Share",
-              roomId: "",
-              isAudioEnabled: false,
-              isVideoEnabled: true,
-              isScreenSharing: true,
-              isHost: false,
-              approvalStatus: "approved",
-              handRaised: false,
-              canRecord: false,
-              joinedAt: Date.now(),
-            }}
-            stream={screenStream}
-            isSelf={false}
-            isActiveSpeaker={false}
-            onAudioLevelChange={handleAudioLevelChange}
-            size="large"
-          />
+        {hasScreenShare ? (
+          screenStream ? (
+            <ScreenShareTile
+              stream={screenStream}
+              sharerName={screenSharerName}
+              isLocal={isLocalScreenSharing}
+            />
+          ) : screenSharingParticipantId ? (
+            <ScreenShareTile
+              stream={remoteStreams?.get(screenSharingParticipantId) || null}
+              sharerName={screenSharerName}
+              isLocal={false}
+            />
+          ) : null
         ) : speakerParticipant ? (
           renderVideoTile(speakerParticipant, "large")
         ) : (
@@ -256,9 +282,9 @@ export function VideoGrid({
       </div>
 
       {/* Other participants strip - when screen sharing, show active speaker + others - responsive height */}
-      {(screenStream ? visibleParticipants : otherParticipants).length > 0 && (
+      {(hasScreenShare ? visibleParticipants : otherParticipants).length > 0 && (
         <div className="h-24 sm:h-32 flex gap-2 overflow-x-auto">
-          {(screenStream ? visibleParticipants : otherParticipants).map(
+          {(hasScreenShare ? visibleParticipants : otherParticipants).map(
             (participant) => (
               <div
                 key={participant.id}
@@ -474,6 +500,63 @@ function VideoTile({
         </div>
 
         {participant.isAudioEnabled && <AudioLevelMeter level={audioLevel} />}
+      </div>
+    </div>
+  );
+}
+
+// Screen Share Tile - dedicated component for screen sharing display
+interface ScreenShareTileProps {
+  stream: MediaStream | null;
+  sharerName: string;
+  isLocal: boolean;
+}
+
+function ScreenShareTile({ stream, sharerName, isLocal }: ScreenShareTileProps) {
+  const videoRef = useRef<HTMLVideoElement>(null);
+
+  useEffect(() => {
+    if (videoRef.current && stream) {
+      videoRef.current.srcObject = stream;
+    }
+    return () => {
+      if (videoRef.current) {
+        videoRef.current.srcObject = null;
+      }
+    };
+  }, [stream]);
+
+  return (
+    <div
+      className="relative h-full w-full bg-black rounded-lg overflow-hidden border-2 border-primary"
+      data-testid="screen-share-tile"
+    >
+      {stream ? (
+        <video
+          ref={videoRef}
+          autoPlay
+          playsInline
+          muted
+          className="w-full h-full object-contain"
+          data-testid="screen-share-video"
+        />
+      ) : (
+        <div className="w-full h-full flex items-center justify-center bg-muted">
+          <div className="text-center text-muted-foreground">
+            <Monitor className="w-16 h-16 mx-auto mb-2 opacity-50" />
+            <p>Waiting for screen...</p>
+          </div>
+        </div>
+      )}
+
+      {/* Screen share label */}
+      <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-3">
+        <div className="flex items-center gap-2">
+          <Monitor className="w-4 h-4 text-primary" />
+          <span className="text-white text-sm font-medium">
+            {isLocal ? "You are presenting" : `${sharerName}'s screen`}
+          </span>
+        </div>
       </div>
     </div>
   );
