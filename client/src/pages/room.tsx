@@ -2542,26 +2542,40 @@ export default function Room() {
   };
 
   const stopScreenShare = (source: "manual" | "browser") => {
+    // Clear ref immediately to prevent re-entry
     if (!isScreenSharingRef.current) return;
-
     isScreenSharingRef.current = false;
+
+    // Stop all screen share tracks
+    if (screenStream) {
+      screenStream.getTracks().forEach((track) => {
+        track.onended = null; // Remove event handler to prevent double-calling
+        track.stop();
+      });
+    }
+
+    // Clear state - must happen together
     setIsScreenSharing(false);
-    screenStream?.getTracks().forEach((track) => track.stop());
     setScreenStream(null);
     setScreenSharingParticipantId(null);
+    setScreenShareMode("screen-and-camera"); // Reset to default
 
     // Replace screen track with camera track in all peer connections
     const cameraTrack = getOutboundStream()?.getVideoTracks()[0];
     if (cameraTrack) {
       peersRef.current.forEach((peerData, peerId) => {
-        const pc = peerData.pc as RTCPeerConnection;
-        const senders = pc.getSenders();
-        senders.forEach((sender) => {
-          if (sender.track?.kind === "video") {
-            console.log(`📷 Restoring camera track for peer ${peerId}`);
-            sender.replaceTrack(cameraTrack.clone());
-          }
-        });
+        try {
+          const pc = peerData.pc as RTCPeerConnection;
+          const senders = pc.getSenders();
+          senders.forEach((sender) => {
+            if (sender.track?.kind === "video") {
+              console.log(`📷 Restoring camera track for peer ${peerId}`);
+              sender.replaceTrack(cameraTrack.clone());
+            }
+          });
+        } catch (err) {
+          console.warn(`Could not restore camera track for peer ${peerId}:`, err);
+        }
       });
     }
 
@@ -2585,8 +2599,10 @@ export default function Room() {
   };
 
   const startScreenShare = async (mode: "screen-only" | "screen-and-camera") => {
+    // First, try to get screen share permission
+    let stream: MediaStream;
     try {
-      const stream = await navigator.mediaDevices.getDisplayMedia({
+      stream = await navigator.mediaDevices.getDisplayMedia({
         video: {
           width: { ideal: 1920 },
           height: { ideal: 1080 },
@@ -2594,17 +2610,32 @@ export default function Room() {
         },
         audio: true,
       });
+    } catch (error) {
+      console.error("Error getting screen share permission:", error);
+      // Only show error toast if user didn't cancel
+      if ((error as Error).name !== "NotAllowedError") {
+        toast({
+          title: "Screen Share Failed",
+          description: "Could not start screen sharing",
+          variant: "destructive",
+        });
+      }
+      return;
+    }
 
-      setScreenStream(stream);
-      setIsScreenSharing(true);
-      setScreenShareMode(mode);
-      setScreenSharingParticipantId(participantId);
-      isScreenSharingRef.current = true;
+    // Screen share permission granted - update state
+    setScreenStream(stream);
+    setIsScreenSharing(true);
+    setScreenShareMode(mode);
+    setScreenSharingParticipantId(participantId);
+    isScreenSharingRef.current = true;
 
-      // Replace camera video track with screen track in all peer connections
-      const screenVideoTrack = stream.getVideoTracks()[0];
-      if (screenVideoTrack) {
-        peersRef.current.forEach((peerData, peerId) => {
+    // Replace camera video track with screen track in all peer connections
+    // This is wrapped separately so failures don't affect the main screen share
+    const screenVideoTrack = stream.getVideoTracks()[0];
+    if (screenVideoTrack) {
+      peersRef.current.forEach((peerData, peerId) => {
+        try {
           const pc = peerData.pc as RTCPeerConnection;
           const senders = pc.getSenders();
           senders.forEach((sender) => {
@@ -2613,41 +2644,37 @@ export default function Room() {
               sender.replaceTrack(screenVideoTrack.clone());
             }
           });
-        });
-      }
+        } catch (err) {
+          console.warn(`Could not replace track for peer ${peerId}:`, err);
+        }
+      });
+    }
 
-      wsRef.current?.send(
-        JSON.stringify({
-          type: "screen-share",
-          roomId,
-          participantId,
-          isSharing: true,
-          mode: mode,
-        })
-      );
+    wsRef.current?.send(
+      JSON.stringify({
+        type: "screen-share",
+        roomId,
+        participantId,
+        isSharing: true,
+        mode: mode,
+      })
+    );
 
-      stream.getVideoTracks()[0].onended = () => {
+    // Handle browser's native "Stop sharing" button
+    if (screenVideoTrack) {
+      screenVideoTrack.onended = () => {
         if (isScreenSharingRef.current) {
           stopScreenShare("browser");
         }
       };
-
-      toast({
-        title: "Screen Sharing Started",
-        description: mode === "screen-only" 
-          ? "Sharing screen only" 
-          : "Sharing screen with camera visible",
-      });
-    } catch (error) {
-      console.error("Error sharing screen:", error);
-      if ((error as Error).name !== "NotAllowedError") {
-        toast({
-          title: "Screen Share Failed",
-          description: "Could not start screen sharing",
-          variant: "destructive",
-        });
-      }
     }
+
+    toast({
+      title: "Screen Sharing Started",
+      description: mode === "screen-only" 
+        ? "Sharing screen only" 
+        : "Sharing screen with camera visible",
+    });
   };
 
   const toggleScreenShare = async () => {
