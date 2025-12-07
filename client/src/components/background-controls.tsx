@@ -154,7 +154,6 @@ export function BackgroundControls({
                 onClick={() => handleModeChange('none')}
                 className="flex-1 min-w-[100px]"
                 data-testid="button-background-none"
-                disabled={!isProcessing}
               >
                 <X className="w-4 h-4 mr-2" />
                 None
@@ -164,7 +163,6 @@ export function BackgroundControls({
                 onClick={() => handleModeChange('blur')}
                 className="flex-1 min-w-[100px]"
                 data-testid="button-background-blur"
-                disabled={!isProcessing}
               >
                 <Circle className="w-4 h-4 mr-2" />
                 Blur
@@ -174,7 +172,6 @@ export function BackgroundControls({
                 onClick={() => handleModeChange('image')}
                 className="flex-1 min-w-[100px]"
                 data-testid="button-background-image"
-                disabled={!isProcessing}
               >
                 <ImageIcon className="w-4 h-4 mr-2" />
                 Image
@@ -184,7 +181,7 @@ export function BackgroundControls({
                 onClick={() => handleModeChange('video')}
                 className="flex-1 min-w-[100px]"
                 data-testid="button-background-video"
-                disabled={!isProcessing || !canUseAnimated}
+                disabled={!canUseAnimated}
               >
                 <Play className="w-4 h-4 mr-2" />
                 Animated
@@ -316,7 +313,7 @@ export function BackgroundControls({
 
           {!isProcessing && (
             <div className="text-sm text-muted-foreground p-3 bg-muted rounded-md">
-              Background effects are initializing. This may take a moment...
+              Background effects are loading. Select your preferred settings - they will apply once the AI model is ready.
             </div>
           )}
 
