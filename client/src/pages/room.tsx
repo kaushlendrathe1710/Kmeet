@@ -1679,6 +1679,7 @@ export default function Room() {
           roomId,
           participantId,
           participantName,
+          userId: user?.id, // Pass user ID for subscription check
         })
       );
 

@@ -5,6 +5,7 @@ import { storage } from "./storage";
 import type { Participant, ChatMessage, WSMessage } from "@shared/schema";
 import "dotenv/config";
 import { setupAuthRoutes } from "./authRoutes";
+import { canRecord as checkCanRecord } from "./auth";
 
 interface WSClient extends WebSocket {
   participantId?: string;
@@ -124,10 +125,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         switch (message.type) {
           case "join-room": {
-            const { roomId, participantId, participantName } = message;
+            const { roomId, participantId, participantName, userId } = message;
 
             let room = await storage.getRoom(roomId);
             let isHost = !room;
+            
+            // Check if user has subscription permission to record
+            let hasRecordingPermission = false;
+            if (userId) {
+              const recordResult = await checkCanRecord(userId);
+              hasRecordingPermission = recordResult.allowed;
+            }
 
             if (!room) {
               room = await storage.createRoom(roomId, participantId);
@@ -189,7 +197,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               isHost,
               approvalStatus: isHost ? "approved" : "pending",
               handRaised: false,
-              canRecord: isHost,
+              canRecord: hasRecordingPermission, // Based on subscription, not just host status
               joinedAt: Date.now(),
             };
 
