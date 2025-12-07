@@ -266,13 +266,12 @@ export default function Room() {
       setLocation("/");
       return;
     }
-
+    
     const recoveredState = recoverRoomState(roomId);
     if (recoveredState) {
-      if (recoveredState.isAudioEnabled !== undefined)
-        setIsAudioEnabled(recoveredState.isAudioEnabled);
-      if (recoveredState.isVideoEnabled !== undefined)
-        setIsVideoEnabled(recoveredState.isVideoEnabled);
+      // NOTE: We intentionally do NOT recover isAudioEnabled/isVideoEnabled
+      // Camera and mic should always start fresh (enabled) on room join
+      // to prevent bugs where corrupted state persists across sessions
       if (recoveredState.videoQuality)
         setVideoQuality(recoveredState.videoQuality as VideoQualityLevel);
       if (recoveredState.currentPreset)
