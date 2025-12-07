@@ -3608,6 +3608,11 @@ export default function Room() {
               ['animatedBackgrounds', 'videoBackgrounds', 'premiumBackgrounds'].includes(f)
             )
           }
+          hasLimitedAnimated={
+            (subscription?.status === 'active' || subscription?.status === 'trial') &&
+            Array.isArray(subscription?.plan?.features) &&
+            (subscription.plan.features as string[]).includes('limitedAnimatedBackgrounds')
+          }
         />
 
         {showFileSharing && (

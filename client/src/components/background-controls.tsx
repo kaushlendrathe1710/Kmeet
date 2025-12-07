@@ -40,6 +40,7 @@ interface BackgroundControlsProps {
   onSettingsChange: (settings: Partial<BackgroundSettings>) => void;
   isProcessing: boolean;
   hasSubscription?: boolean;
+  hasLimitedAnimated?: boolean;
 }
 
 const CATEGORY_ICONS: Record<string, typeof Building2> = {
@@ -60,18 +61,21 @@ export function BackgroundControls({
   onSettingsChange,
   isProcessing,
   hasSubscription = false,
+  hasLimitedAnimated = false,
 }: BackgroundControlsProps) {
   const [selectedCategory, setSelectedCategory] = useState<string>('office');
   const [customImage, setCustomImage] = useState("");
 
+  const canUseAnimated = hasSubscription || hasLimitedAnimated;
+
   useEffect(() => {
-    if (!hasSubscription && settings.mode === 'video') {
+    if (!canUseAnimated && settings.mode === 'video') {
       onSettingsChange({ mode: 'none', backgroundVideo: null });
     }
-  }, [hasSubscription, settings.mode, onSettingsChange]);
+  }, [canUseAnimated, settings.mode, onSettingsChange]);
 
   const handleModeChange = (mode: BackgroundMode) => {
-    if (mode === 'video' && !hasSubscription) {
+    if (mode === 'video' && !canUseAnimated) {
       return;
     }
     
@@ -90,23 +94,20 @@ export function BackgroundControls({
     onSettingsChange({ blurAmount: value[0] });
   };
 
-  const handleBackgroundSelect = (item: BackgroundItem) => {
-    if (item.isPremium && !hasSubscription) {
-      return;
-    }
-    
-    if (item.type === 'image') {
-      onSettingsChange({ 
-        mode: 'image',
-        backgroundImage: item.url,
-        backgroundVideo: null,
-      });
-    } else if (item.type === 'video') {
-      if (!hasSubscription) return;
+  const handleBackgroundSelect = (item: BackgroundItem, index?: number) => {
+    if (item.type === 'video') {
+      if (!canUseAnimated) return;
+      if (hasLimitedAnimated && !hasSubscription && index !== 0) return;
       onSettingsChange({ 
         mode: 'video',
         backgroundVideo: item.url,
         backgroundImage: null,
+      });
+    } else if (item.type === 'image') {
+      onSettingsChange({ 
+        mode: 'image',
+        backgroundImage: item.url,
+        backgroundVideo: null,
       });
     }
   };
@@ -183,11 +184,11 @@ export function BackgroundControls({
                 onClick={() => handleModeChange('video')}
                 className="flex-1 min-w-[100px]"
                 data-testid="button-background-video"
-                disabled={!isProcessing || !hasSubscription}
+                disabled={!isProcessing || !canUseAnimated}
               >
                 <Play className="w-4 h-4 mr-2" />
                 Animated
-                {!hasSubscription && <Lock className="w-3 h-3 ml-1" />}
+                {!canUseAnimated && <Lock className="w-3 h-3 ml-1" />}
               </Button>
             </div>
           </div>
@@ -222,14 +223,14 @@ export function BackgroundControls({
                         onClick={() => setSelectedCategory(category.id)}
                         className="flex-shrink-0 gap-1"
                         data-testid={`button-category-${category.id}`}
-                        disabled={isPremiumCategory && !hasSubscription}
+                        disabled={isPremiumCategory && !canUseAnimated}
                       >
                         <Icon className="w-4 h-4" />
                         {category.name}
-                        {isPremiumCategory && !hasSubscription && (
+                        {isPremiumCategory && !canUseAnimated && (
                           <Lock className="w-3 h-3 ml-1" />
                         )}
-                        {isPremiumCategory && hasSubscription && (
+                        {isPremiumCategory && canUseAnimated && (
                           <Crown className="w-3 h-3 ml-1 text-yellow-500" />
                         )}
                       </Button>
@@ -240,8 +241,11 @@ export function BackgroundControls({
 
               <ScrollArea className="flex-1 min-h-[200px]">
                 <div className="grid grid-cols-3 sm:grid-cols-4 gap-3 pr-4">
-                  {currentCategoryItems.map((item) => {
-                    const isLocked = item.isPremium && !hasSubscription;
+                  {currentCategoryItems.map((item, index) => {
+                    const isAnimatedItem = item.type === 'video';
+                    const isLocked = isAnimatedItem && !canUseAnimated ? true :
+                                     isAnimatedItem && hasLimitedAnimated && !hasSubscription && index !== 0 ? true :
+                                     false;
                     const isSelected = 
                       (item.type === 'image' && settings.backgroundImage === item.url) ||
                       (item.type === 'video' && settings.backgroundVideo === item.url);
@@ -249,7 +253,7 @@ export function BackgroundControls({
                     return (
                       <button
                         key={item.id}
-                        onClick={() => handleBackgroundSelect(item)}
+                        onClick={() => handleBackgroundSelect(item, index)}
                         disabled={isLocked}
                         className={`relative aspect-video rounded-lg overflow-hidden border-2 transition-all ${
                           isSelected
@@ -316,10 +320,17 @@ export function BackgroundControls({
             </div>
           )}
 
-          {isAnimatedCategory && !hasSubscription && (
+          {isAnimatedCategory && !hasSubscription && hasLimitedAnimated && (
             <div className="text-sm p-3 bg-primary/10 border border-primary/20 rounded-md flex items-center gap-2">
               <Crown className="w-4 h-4 text-primary" />
-              <span>Animated backgrounds are a premium feature. Subscribe to unlock all moving backgrounds.</span>
+              <span>Basic plan includes 1 animated background. Upgrade to Pro or Enterprise to unlock all moving backgrounds.</span>
+            </div>
+          )}
+          
+          {isAnimatedCategory && !canUseAnimated && (
+            <div className="text-sm p-3 bg-primary/10 border border-primary/20 rounded-md flex items-center gap-2">
+              <Crown className="w-4 h-4 text-primary" />
+              <span>Animated backgrounds are a premium feature. Subscribe to unlock moving backgrounds.</span>
             </div>
           )}
         </div>
