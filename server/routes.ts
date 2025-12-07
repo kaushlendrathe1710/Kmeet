@@ -4,6 +4,7 @@ import { WebSocketServer, WebSocket } from "ws";
 import { storage } from "./storage";
 import type { Participant, ChatMessage, WSMessage } from "@shared/schema";
 import "dotenv/config";
+import { setupAuthRoutes } from "./authRoutes";
 
 interface WSClient extends WebSocket {
   participantId?: string;
@@ -12,6 +13,12 @@ interface WSClient extends WebSocket {
 
 export async function registerRoutes(app: Express): Promise<Server> {
   const httpServer = createServer(app);
+
+  // Setup authentication routes and middleware
+  setupAuthRoutes(app);
+  
+  // Ensure super admin exists in database
+  await storage.ensureSuperAdmin();
 
   // API endpoint to get TURN server credentials
   // This keeps credentials secure on the server side
