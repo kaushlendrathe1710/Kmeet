@@ -1,7 +1,8 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useRoute, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { useAuth } from "@/lib/auth";
 import {
   Mic,
   MicOff,
@@ -86,11 +87,16 @@ export default function Room() {
   const [, params] = useRoute("/room/:roomId");
   const [, setLocation] = useLocation();
   const { toast } = useToast();
+  const { user } = useAuth();
 
   const roomId = params?.roomId || "";
-  const [participantName] = useState(
-    () => localStorage.getItem("participantName") || "Anonymous"
-  );
+  
+  // Use authenticated user's name, fall back to localStorage, then "Anonymous"
+  const participantName = useMemo(() => {
+    if (user?.fullName) return user.fullName;
+    return localStorage.getItem("participantName") || "Anonymous";
+  }, [user?.fullName]);
+  
   const [participantId] = useState(() =>
     Math.random().toString(36).substring(7)
   );

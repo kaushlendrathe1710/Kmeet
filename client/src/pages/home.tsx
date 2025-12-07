@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { useLocation } from "wouter";
+import { useLocation, Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -25,12 +25,16 @@ import {
   Settings,
   Copy,
   Check,
+  LogIn,
+  LayoutDashboard,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/lib/auth";
 
 export default function Home() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
+  const { isAuthenticated, isLoading: authLoading, user, isAdmin } = useAuth();
   const [name, setName] = useState("");
   const [roomCode, setRoomCode] = useState("");
   const [isVideoEnabled, setIsVideoEnabled] = useState(true);
@@ -223,8 +227,47 @@ export default function Home() {
     });
   };
 
+  // Set name from user profile if authenticated
+  useEffect(() => {
+    if (isAuthenticated && user?.fullName && !name) {
+      setName(user.fullName);
+    }
+  }, [isAuthenticated, user?.fullName, name]);
+
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center p-4">
+    <div className="min-h-screen bg-background flex flex-col">
+      <header className="border-b bg-background/95 backdrop-blur">
+        <div className="container mx-auto px-4 py-3 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="bg-primary/10 p-2 rounded-lg">
+              <Video className="h-5 w-5 text-primary" />
+            </div>
+            <h1 className="font-bold text-lg">PodcastMeet</h1>
+          </div>
+          
+          <div className="flex items-center gap-2">
+            {authLoading ? (
+              <div className="w-5 h-5 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+            ) : isAuthenticated ? (
+              <Button variant="outline" size="sm" asChild data-testid="link-dashboard-header">
+                <Link href={isAdmin ? "/admin" : "/dashboard"}>
+                  <LayoutDashboard className="h-4 w-4 mr-2" />
+                  Dashboard
+                </Link>
+              </Button>
+            ) : (
+              <Button size="sm" asChild data-testid="link-login-header">
+                <Link href="/login">
+                  <LogIn className="h-4 w-4 mr-2" />
+                  Sign In
+                </Link>
+              </Button>
+            )}
+          </div>
+        </div>
+      </header>
+      
+      <div className="flex-1 flex items-center justify-center p-4">
       <div className="w-full max-w-6xl grid md:grid-cols-2 gap-6">
         <Card className="md:col-span-1">
           <CardHeader>
@@ -419,6 +462,7 @@ export default function Home() {
             </CardContent>
           </Card>
         </div>
+      </div>
       </div>
     </div>
   );
