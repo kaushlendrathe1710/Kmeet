@@ -243,6 +243,88 @@ export default function AdminPage() {
             <CreditCard className="h-4 w-4 mr-2" />
             Subscription Plans
           </Button>
+          
+          {isSuperAdmin && (
+            <>
+              <Separator className="my-3" />
+              <Dialog open={showCreateAdmin} onOpenChange={setShowCreateAdmin}>
+                <DialogTrigger asChild>
+                  <Button className="w-full justify-start" data-testid="button-create-admin">
+                    <Plus className="h-4 w-4 mr-2" />
+                    Create Admin
+                  </Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Create New Admin</DialogTitle>
+                    <DialogDescription>
+                      Add a new administrator to the platform. If the email already exists, that user will be promoted to admin.
+                    </DialogDescription>
+                  </DialogHeader>
+                  <div className="space-y-4 py-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="admin-email">Email *</Label>
+                      <Input
+                        id="admin-email"
+                        type="email"
+                        placeholder="admin@example.com"
+                        value={newAdmin.email}
+                        onChange={(e) => setNewAdmin({ ...newAdmin, email: e.target.value })}
+                        data-testid="input-admin-email"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="admin-name">Full Name *</Label>
+                      <Input
+                        id="admin-name"
+                        placeholder="John Doe"
+                        value={newAdmin.fullName}
+                        onChange={(e) => setNewAdmin({ ...newAdmin, fullName: e.target.value })}
+                        data-testid="input-admin-name"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="admin-mobile">Mobile (Optional)</Label>
+                      <Input
+                        id="admin-mobile"
+                        type="tel"
+                        placeholder="+1234567890"
+                        value={newAdmin.mobile}
+                        onChange={(e) => setNewAdmin({ ...newAdmin, mobile: e.target.value })}
+                        data-testid="input-admin-mobile"
+                      />
+                    </div>
+                  </div>
+                  <DialogFooter>
+                    <Button
+                      variant="outline"
+                      onClick={() => setShowCreateAdmin(false)}
+                      data-testid="button-cancel-create-admin"
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      onClick={() => createAdminMutation.mutate(newAdmin)}
+                      disabled={!newAdmin.email || !newAdmin.fullName || createAdminMutation.isPending}
+                      data-testid="button-submit-create-admin"
+                    >
+                      {createAdminMutation.isPending ? (
+                        <>
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          Creating...
+                        </>
+                      ) : (
+                        <>
+                          <ShieldCheck className="h-4 w-4 mr-2" />
+                          Create Admin
+                        </>
+                      )}
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
+            </>
+          )}
         </nav>
 
         <Separator />
@@ -355,7 +437,7 @@ export default function AdminPage() {
 
           {activeTab === "users" && (
             <div className="space-y-6">
-              <div className="flex items-center justify-between gap-4">
+              <div className="flex items-center gap-4">
                 <div className="relative flex-1 max-w-sm">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                   <Input
@@ -366,85 +448,6 @@ export default function AdminPage() {
                     data-testid="input-search-users"
                   />
                 </div>
-                
-                {isSuperAdmin && (
-                  <Dialog open={showCreateAdmin} onOpenChange={setShowCreateAdmin}>
-                    <DialogTrigger asChild>
-                      <Button data-testid="button-create-admin">
-                        <Plus className="h-4 w-4 mr-2" />
-                        Create Admin
-                      </Button>
-                    </DialogTrigger>
-                    <DialogContent>
-                      <DialogHeader>
-                        <DialogTitle>Create New Admin</DialogTitle>
-                        <DialogDescription>
-                          Add a new administrator to the platform. If the email already exists, that user will be promoted to admin.
-                        </DialogDescription>
-                      </DialogHeader>
-                      <div className="space-y-4 py-4">
-                        <div className="space-y-2">
-                          <Label htmlFor="admin-email">Email *</Label>
-                          <Input
-                            id="admin-email"
-                            type="email"
-                            placeholder="admin@example.com"
-                            value={newAdmin.email}
-                            onChange={(e) => setNewAdmin({ ...newAdmin, email: e.target.value })}
-                            data-testid="input-admin-email"
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label htmlFor="admin-name">Full Name *</Label>
-                          <Input
-                            id="admin-name"
-                            placeholder="John Doe"
-                            value={newAdmin.fullName}
-                            onChange={(e) => setNewAdmin({ ...newAdmin, fullName: e.target.value })}
-                            data-testid="input-admin-name"
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label htmlFor="admin-mobile">Mobile (Optional)</Label>
-                          <Input
-                            id="admin-mobile"
-                            type="tel"
-                            placeholder="+1234567890"
-                            value={newAdmin.mobile}
-                            onChange={(e) => setNewAdmin({ ...newAdmin, mobile: e.target.value })}
-                            data-testid="input-admin-mobile"
-                          />
-                        </div>
-                      </div>
-                      <DialogFooter>
-                        <Button
-                          variant="outline"
-                          onClick={() => setShowCreateAdmin(false)}
-                          data-testid="button-cancel-create-admin"
-                        >
-                          Cancel
-                        </Button>
-                        <Button
-                          onClick={() => createAdminMutation.mutate(newAdmin)}
-                          disabled={!newAdmin.email || !newAdmin.fullName || createAdminMutation.isPending}
-                          data-testid="button-submit-create-admin"
-                        >
-                          {createAdminMutation.isPending ? (
-                            <>
-                              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                              Creating...
-                            </>
-                          ) : (
-                            <>
-                              <ShieldCheck className="h-4 w-4 mr-2" />
-                              Create Admin
-                            </>
-                          )}
-                        </Button>
-                      </DialogFooter>
-                    </DialogContent>
-                  </Dialog>
-                )}
               </div>
 
               {usersLoading ? (
