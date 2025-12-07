@@ -27,7 +27,7 @@ import {
   ArrowRightLeft,
   Maximize,
   Minimize,
-  Wand2,
+  Palette,
   FileUp,
   User,
   LayoutGrid,
@@ -3466,7 +3466,7 @@ export default function Room() {
                 data-testid="button-toggle-background"
                 title="Background Effects"
               >
-                <Wand2 className="w-3 h-3 sm:w-4 sm:h-4" />
+                <Palette className="w-3 h-3 sm:w-4 sm:h-4" />
               </Button>
 
               <Button
