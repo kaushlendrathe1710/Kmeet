@@ -1755,7 +1755,20 @@ export default function Room() {
           } participants`
         );
         setIsWaitingApproval(false);
-        setParticipants(message.participants);
+        // Preserve local participant's audio/video state to prevent race condition
+        setParticipants((prev) => {
+          const localParticipant = prev.find((p) => p.id === participantId);
+          return message.participants.map((p: Participant) => {
+            if (p.id === participantId && localParticipant) {
+              return {
+                ...p,
+                isAudioEnabled: localParticipant.isAudioEnabled,
+                isVideoEnabled: localParticipant.isVideoEnabled,
+              };
+            }
+            return p;
+          });
+        });
         toast({
           title: "Approved!",
           description: "You have been approved to join the meeting",
@@ -1922,7 +1935,22 @@ export default function Room() {
         console.log("Received participants list:", message.participants);
         setIsHost(true);
         setIsWaitingApproval(false);
-        setParticipants(message.participants);
+        // Preserve local participant's audio/video state to prevent race condition
+        // where server's default (false) overwrites the already-enabled local state
+        setParticipants((prev) => {
+          const localParticipant = prev.find((p) => p.id === participantId);
+          return message.participants.map((p: Participant) => {
+            if (p.id === participantId && localParticipant) {
+              // Keep local audio/video state
+              return {
+                ...p,
+                isAudioEnabled: localParticipant.isAudioEnabled,
+                isVideoEnabled: localParticipant.isVideoEnabled,
+              };
+            }
+            return p;
+          });
+        });
         // Set canRecord from participant data (host gets it automatically)
         const self = message.participants.find(
           (p: any) => p.id === participantId
