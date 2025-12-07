@@ -135,7 +135,7 @@ export class BackgroundProcessor {
   }
 
   private async applyVirtualBackground(segmentation: any) {
-    const { data: mask } = segmentation;
+    const { data: mask, width: maskWidth, height: maskHeight } = segmentation;
     
     this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
 
@@ -153,13 +153,32 @@ export class BackgroundProcessor {
     this.personCtx.drawImage(this.videoElement, 0, 0, this.canvas.width, this.canvas.height);
     const personData = this.personCtx.getImageData(0, 0, this.canvas.width, this.canvas.height);
 
-    for (let i = 0; i < mask.length; i++) {
-      if (mask[i] >= this.maskThreshold) {
-        const offset = i * 4;
-        imageData.data[offset] = personData.data[offset];
-        imageData.data[offset + 1] = personData.data[offset + 1];
-        imageData.data[offset + 2] = personData.data[offset + 2];
-        imageData.data[offset + 3] = personData.data[offset + 3];
+    const scaleX = this.canvas.width / maskWidth;
+    const scaleY = this.canvas.height / maskHeight;
+
+    for (let y = 0; y < this.canvas.height; y++) {
+      for (let x = 0; x < this.canvas.width; x++) {
+        const maskX = Math.floor(x / scaleX);
+        const maskY = Math.floor(y / scaleY);
+        const maskIndex = maskY * maskWidth + maskX;
+        const maskValue = mask[maskIndex] || 0;
+        
+        const pixelIndex = (y * this.canvas.width + x) * 4;
+        
+        if (maskValue > 0.3) {
+          const alpha = Math.min(1, (maskValue - 0.3) / 0.4);
+          const smoothAlpha = alpha * alpha * (3 - 2 * alpha);
+          
+          imageData.data[pixelIndex] = Math.round(
+            imageData.data[pixelIndex] * (1 - smoothAlpha) + personData.data[pixelIndex] * smoothAlpha
+          );
+          imageData.data[pixelIndex + 1] = Math.round(
+            imageData.data[pixelIndex + 1] * (1 - smoothAlpha) + personData.data[pixelIndex + 1] * smoothAlpha
+          );
+          imageData.data[pixelIndex + 2] = Math.round(
+            imageData.data[pixelIndex + 2] * (1 - smoothAlpha) + personData.data[pixelIndex + 2] * smoothAlpha
+          );
+        }
       }
     }
 
@@ -167,7 +186,7 @@ export class BackgroundProcessor {
   }
 
   private async applyVideoBackground(segmentation: any) {
-    const { data: mask } = segmentation;
+    const { data: mask, width: maskWidth, height: maskHeight } = segmentation;
     
     this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
 
@@ -185,13 +204,32 @@ export class BackgroundProcessor {
     this.personCtx.drawImage(this.videoElement, 0, 0, this.canvas.width, this.canvas.height);
     const personData = this.personCtx.getImageData(0, 0, this.canvas.width, this.canvas.height);
 
-    for (let i = 0; i < mask.length; i++) {
-      if (mask[i] >= this.maskThreshold) {
-        const offset = i * 4;
-        imageData.data[offset] = personData.data[offset];
-        imageData.data[offset + 1] = personData.data[offset + 1];
-        imageData.data[offset + 2] = personData.data[offset + 2];
-        imageData.data[offset + 3] = personData.data[offset + 3];
+    const scaleX = this.canvas.width / maskWidth;
+    const scaleY = this.canvas.height / maskHeight;
+
+    for (let y = 0; y < this.canvas.height; y++) {
+      for (let x = 0; x < this.canvas.width; x++) {
+        const maskX = Math.floor(x / scaleX);
+        const maskY = Math.floor(y / scaleY);
+        const maskIndex = maskY * maskWidth + maskX;
+        const maskValue = mask[maskIndex] || 0;
+        
+        const pixelIndex = (y * this.canvas.width + x) * 4;
+        
+        if (maskValue > 0.3) {
+          const alpha = Math.min(1, (maskValue - 0.3) / 0.4);
+          const smoothAlpha = alpha * alpha * (3 - 2 * alpha);
+          
+          imageData.data[pixelIndex] = Math.round(
+            imageData.data[pixelIndex] * (1 - smoothAlpha) + personData.data[pixelIndex] * smoothAlpha
+          );
+          imageData.data[pixelIndex + 1] = Math.round(
+            imageData.data[pixelIndex + 1] * (1 - smoothAlpha) + personData.data[pixelIndex + 1] * smoothAlpha
+          );
+          imageData.data[pixelIndex + 2] = Math.round(
+            imageData.data[pixelIndex + 2] * (1 - smoothAlpha) + personData.data[pixelIndex + 2] * smoothAlpha
+          );
+        }
       }
     }
 
