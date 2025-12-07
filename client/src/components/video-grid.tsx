@@ -31,6 +31,7 @@ interface VideoGridProps {
   currentParticipantId: string;
   videoSettings?: VideoSettings;
   remoteStreams?: Map<string, MediaStream>;
+  remoteScreenStreams?: Map<string, MediaStream>;
   hideSelfView?: boolean;
   peers?: Map<string, any>;
   viewMode?: ViewMode;
@@ -52,6 +53,7 @@ export function VideoGrid({
   currentParticipantId,
   videoSettings,
   remoteStreams,
+  remoteScreenStreams,
   hideSelfView = false,
   peers,
   viewMode = "grid",
@@ -206,9 +208,10 @@ export function VideoGrid({
               isLocal={isLocalScreenSharing}
             />
           ) : screenSharingParticipantId ? (
-            // Remote screen share - the video track is already replaced, so show the remote stream
+            // Remote screen share - use dedicated screen stream if available (screen-and-camera mode)
+            // Otherwise fall back to main stream (screen-only mode where screen replaced camera)
             <ScreenShareTile
-              stream={remoteStreams?.get(screenSharingParticipantId) || null}
+              stream={remoteScreenStreams?.get(screenSharingParticipantId) || remoteStreams?.get(screenSharingParticipantId) || null}
               sharerName={screenSharerName}
               isLocal={false}
             />
@@ -265,7 +268,7 @@ export function VideoGrid({
             />
           ) : screenSharingParticipantId ? (
             <ScreenShareTile
-              stream={remoteStreams?.get(screenSharingParticipantId) || null}
+              stream={remoteScreenStreams?.get(screenSharingParticipantId) || remoteStreams?.get(screenSharingParticipantId) || null}
               sharerName={screenSharerName}
               isLocal={false}
             />

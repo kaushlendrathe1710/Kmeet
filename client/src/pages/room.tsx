@@ -3152,6 +3152,7 @@ export default function Room() {
                 screenSharingParticipantId={screenSharingParticipantId}
                 screenShareMode={screenShareMode}
                 isLocalScreenSharing={isScreenSharing}
+                remoteScreenStreams={remoteScreenStreams}
               />
             </div>
           </div>
