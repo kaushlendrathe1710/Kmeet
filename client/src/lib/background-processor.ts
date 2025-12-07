@@ -1,9 +1,10 @@
-export type BackgroundMode = 'none' | 'blur' | 'image';
+export type BackgroundMode = 'none' | 'blur' | 'image' | 'video';
 
 export interface BackgroundSettings {
   mode: BackgroundMode;
   blurAmount: number;
   backgroundImage: string | null;
+  backgroundVideo: string | null;
 }
 
 export class BackgroundProcessor {
@@ -14,14 +15,18 @@ export class BackgroundProcessor {
   private personCanvas: HTMLCanvasElement;
   private personCtx: CanvasRenderingContext2D;
   private videoElement: HTMLVideoElement;
+  private backgroundVideoElement: HTMLVideoElement | null = null;
+  private backgroundVideoReady = false;
   private animationFrameId: number | null = null;
   private settings: BackgroundSettings = {
     mode: 'none',
     blurAmount: 15,
     backgroundImage: null,
+    backgroundVideo: null,
   };
   private backgroundImageElement: HTMLImageElement | null = null;
   private isProcessing = false;
+  private maskThreshold = 0.5;
 
   constructor() {
     this.canvas = document.createElement('canvas');
@@ -102,6 +107,8 @@ export class BackgroundProcessor {
           await this.applyBlur(segmentation);
         } else if (this.settings.mode === 'image') {
           await this.applyVirtualBackground(segmentation);
+        } else if (this.settings.mode === 'video') {
+          await this.applyVideoBackground(segmentation);
         }
       }
     } catch (error) {
@@ -147,7 +154,7 @@ export class BackgroundProcessor {
     const personData = this.personCtx.getImageData(0, 0, this.canvas.width, this.canvas.height);
 
     for (let i = 0; i < mask.length; i++) {
-      if (mask[i] === 1) {
+      if (mask[i] >= this.maskThreshold) {
         const offset = i * 4;
         imageData.data[offset] = personData.data[offset];
         imageData.data[offset + 1] = personData.data[offset + 1];
@@ -159,8 +166,55 @@ export class BackgroundProcessor {
     this.ctx.putImageData(imageData, 0, 0);
   }
 
+  private async applyVideoBackground(segmentation: any) {
+    const { data: mask } = segmentation;
+    
+    this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+
+    if (this.backgroundVideoElement && this.backgroundVideoReady && !this.backgroundVideoElement.paused) {
+      this.ctx.drawImage(this.backgroundVideoElement, 0, 0, this.canvas.width, this.canvas.height);
+    } else {
+      this.ctx.fillStyle = '#1a1a1a';
+      this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+    }
+
+    const imageData = this.ctx.getImageData(0, 0, this.canvas.width, this.canvas.height);
+    
+    this.personCanvas.width = this.canvas.width;
+    this.personCanvas.height = this.canvas.height;
+    this.personCtx.drawImage(this.videoElement, 0, 0, this.canvas.width, this.canvas.height);
+    const personData = this.personCtx.getImageData(0, 0, this.canvas.width, this.canvas.height);
+
+    for (let i = 0; i < mask.length; i++) {
+      if (mask[i] >= this.maskThreshold) {
+        const offset = i * 4;
+        imageData.data[offset] = personData.data[offset];
+        imageData.data[offset + 1] = personData.data[offset + 1];
+        imageData.data[offset + 2] = personData.data[offset + 2];
+        imageData.data[offset + 3] = personData.data[offset + 3];
+      }
+    }
+
+    this.ctx.putImageData(imageData, 0, 0);
+  }
+
+  private cleanupBackgroundVideo() {
+    if (this.backgroundVideoElement) {
+      this.backgroundVideoElement.pause();
+      this.backgroundVideoElement.removeAttribute('src');
+      this.backgroundVideoElement.load();
+      this.backgroundVideoElement = null;
+      this.backgroundVideoReady = false;
+    }
+  }
+
   updateSettings(settings: Partial<BackgroundSettings>) {
+    const prevMode = this.settings.mode;
     this.settings = { ...this.settings, ...settings };
+    
+    if (settings.mode !== undefined && settings.mode !== 'video' && prevMode === 'video') {
+      this.cleanupBackgroundVideo();
+    }
     
     if (settings.backgroundImage !== undefined) {
       if (settings.backgroundImage) {
@@ -171,6 +225,35 @@ export class BackgroundProcessor {
         this.backgroundImageElement = null;
       }
     }
+
+    if (settings.backgroundVideo !== undefined) {
+      this.cleanupBackgroundVideo();
+      
+      if (settings.backgroundVideo) {
+        this.backgroundVideoElement = document.createElement('video');
+        this.backgroundVideoElement.crossOrigin = 'anonymous';
+        this.backgroundVideoElement.loop = true;
+        this.backgroundVideoElement.muted = true;
+        this.backgroundVideoElement.playsInline = true;
+        this.backgroundVideoElement.preload = 'auto';
+        
+        this.backgroundVideoElement.addEventListener('loadeddata', () => {
+          this.backgroundVideoReady = true;
+        });
+        
+        this.backgroundVideoElement.addEventListener('error', (e) => {
+          console.error('Failed to load background video:', e);
+          this.backgroundVideoReady = false;
+        });
+        
+        this.backgroundVideoElement.src = settings.backgroundVideo;
+        
+        this.backgroundVideoElement.play().catch(err => {
+          console.error('Failed to play background video:', err);
+          this.backgroundVideoReady = false;
+        });
+      }
+    }
   }
 
   stopProcessing() {
@@ -179,7 +262,6 @@ export class BackgroundProcessor {
       cancelAnimationFrame(this.animationFrameId);
       this.animationFrameId = null;
     }
-    // Clear srcObject to release camera hardware
     if (this.videoElement.srcObject) {
       this.videoElement.srcObject = null;
     }
@@ -189,7 +271,7 @@ export class BackgroundProcessor {
     this.stopProcessing();
     this.model = null;
     this.backgroundImageElement = null;
-    // Ensure video element is fully cleared
+    this.cleanupBackgroundVideo();
     this.videoElement.srcObject = null;
   }
 }

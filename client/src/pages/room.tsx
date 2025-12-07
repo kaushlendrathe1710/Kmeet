@@ -87,7 +87,7 @@ export default function Room() {
   const [, params] = useRoute("/room/:roomId");
   const [, setLocation] = useLocation();
   const { toast } = useToast();
-  const { user } = useAuth();
+  const { user, subscription } = useAuth();
 
   const roomId = params?.roomId || "";
   
@@ -150,6 +150,7 @@ export default function Room() {
       mode: "none",
       blurAmount: 15,
       backgroundImage: null,
+      backgroundVideo: null,
     });
   const [isBackgroundProcessing, setIsBackgroundProcessing] = useState(false);
   const [showFileSharing, setShowFileSharing] = useState(false);
@@ -3600,6 +3601,13 @@ export default function Room() {
             setBackgroundSettings((prev) => ({ ...prev, ...settings }))
           }
           isProcessing={isBackgroundProcessing}
+          hasSubscription={
+            (subscription?.status === 'active' || subscription?.status === 'trial') &&
+            Array.isArray(subscription?.plan?.features) &&
+            (subscription.plan.features as string[]).some(f => 
+              ['animatedBackgrounds', 'videoBackgrounds', 'premiumBackgrounds'].includes(f)
+            )
+          }
         />
 
         {showFileSharing && (

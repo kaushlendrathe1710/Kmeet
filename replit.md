@@ -24,7 +24,16 @@ PodcastMeet implements WebRTC for peer-to-peer video/audio streaming and screen 
 
 ### Core Features
 
-Key features include: Host controls (remove, mute all, transfer host, lock room), Individual track recording (WebM/WAV, 48kHz, auto-naming), communication tools (hand raising, emojis, chat, file sharing), media controls (audio/video toggle, screen sharing with dual modes: "screen-only" and "screen-and-camera"), network quality adaptation (reconnection handling, packet loss display, bandwidth adaptation, quality presets), visual enhancements (background blur, virtual backgrounds, beauty filters), and UX features (hide self-view, audio meters, active speaker detection, grid/speaker view, pin participant, auto-save/recovery).
+Key features include: Host controls (remove, mute all, transfer host, lock room), Individual track recording (WebM/WAV, 48kHz, auto-naming), communication tools (hand raising, emojis, chat, file sharing), media controls (audio/video toggle, screen sharing with dual modes: "screen-only" and "screen-and-camera"), network quality adaptation (reconnection handling, packet loss display, bandwidth adaptation, quality presets), visual enhancements (background blur, virtual backgrounds with 40+ static images across 7 categories, animated/video backgrounds as premium subscription feature, beauty filters), and UX features (hide self-view, audio meters, active speaker detection, grid/speaker view, pin participant, auto-save/recovery).
+
+### Virtual Backgrounds
+
+The platform offers comprehensive virtual background support using TensorFlow.js BodyPix for person segmentation:
+- **Static Backgrounds**: 40+ free background images across categories (Office, Nature, Abstract, Space, Cozy, City, Beach)
+- **Animated Backgrounds**: 12+ moving/video backgrounds (Ocean waves, Fireplace, Rain, Northern lights, etc.) - **Premium subscription required**
+- **Background Modes**: None, Blur (adjustable intensity), Static Image, Video/Animated
+- **Custom URL Support**: Users can provide custom image URLs for static backgrounds
+- Files: `client/src/lib/background-processor.ts`, `client/src/lib/background-catalog.ts`, `client/src/components/background-controls.tsx`
 
 ## External Dependencies
 
