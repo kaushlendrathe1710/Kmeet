@@ -492,6 +492,44 @@ export function setupAuthRoutes(app: Express): void {
     }
   });
 
+  // Create new admin user (super admin only)
+  app.post("/api/admin/create-admin", requireSuperAdmin, async (req: Request, res: Response) => {
+    try {
+      const { email, fullName, mobile } = req.body;
+      
+      if (!email || !fullName) {
+        return res.status(400).json({ error: "Email and full name are required" });
+      }
+      
+      // Check if user already exists
+      const existingUser = await storage.getUserByEmail(email);
+      
+      if (existingUser) {
+        // If user exists, just update their role to admin
+        if (existingUser.role === "superadmin") {
+          return res.status(400).json({ error: "Cannot modify super admin" });
+        }
+        
+        const updatedUser = await storage.updateUser(existingUser.id, { role: "admin" });
+        return res.json({ user: updatedUser, message: "Existing user promoted to admin" });
+      }
+      
+      // Create new admin user
+      const newAdmin = await storage.createUser({
+        email: email.toLowerCase().trim(),
+        fullName,
+        mobile: mobile || null,
+        role: "admin",
+        isActive: true,
+      });
+      
+      res.json({ user: newAdmin, message: "New admin created successfully" });
+    } catch (error) {
+      console.error("Create admin error:", error);
+      res.status(500).json({ error: "Failed to create admin" });
+    }
+  });
+
   // Create subscription plan (admin only)
   app.post("/api/admin/plans", requireAdmin, async (req: Request, res: Response) => {
     try {
