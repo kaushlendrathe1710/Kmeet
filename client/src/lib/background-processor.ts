@@ -138,34 +138,59 @@ export class BackgroundProcessor {
     this.personCanvas.width = this.canvas.width;
     this.personCanvas.height = this.canvas.height;
     
+    this.personCtx.drawImage(this.videoElement, 0, 0, this.canvas.width, this.canvas.height);
+    
+    const foregroundColor = { r: 255, g: 255, b: 255, a: 255 };
+    const backgroundColor = { r: 0, g: 0, b: 0, a: 0 };
+    const maskImage = this.bodyPix.toMask(segmentation, foregroundColor, backgroundColor, true);
+    
+    const tempCanvas = document.createElement('canvas');
+    tempCanvas.width = this.canvas.width;
+    tempCanvas.height = this.canvas.height;
+    const tempCtx = tempCanvas.getContext('2d')!;
+    tempCtx.putImageData(maskImage, 0, 0);
+    
+    tempCtx.filter = 'blur(3px)';
+    tempCtx.globalCompositeOperation = 'source-over';
+    tempCtx.drawImage(tempCanvas, 0, 0);
+    
+    this.personCtx.globalCompositeOperation = 'destination-in';
+    this.personCtx.drawImage(tempCanvas, 0, 0);
+    this.personCtx.globalCompositeOperation = 'source-over';
+    
     if (this.backgroundImageElement && this.backgroundImageElement.complete) {
       this.ctx.drawImage(this.backgroundImageElement, 0, 0, this.canvas.width, this.canvas.height);
     } else {
       this.ctx.fillStyle = '#1a1a1a';
       this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
     }
-
-    const foregroundColor = { r: 0, g: 0, b: 0, a: 0 };
-    const backgroundColor = { r: 0, g: 0, b: 0, a: 255 };
-    const maskImage = this.bodyPix.toMask(segmentation, foregroundColor, backgroundColor, true);
     
-    this.personCtx.putImageData(maskImage, 0, 0);
-    
-    this.ctx.save();
-    this.ctx.filter = 'blur(4px)';
-    this.ctx.globalCompositeOperation = 'destination-out';
     this.ctx.drawImage(this.personCanvas, 0, 0);
-    this.ctx.restore();
-    
-    this.ctx.globalCompositeOperation = 'destination-over';
-    this.ctx.drawImage(this.videoElement, 0, 0, this.canvas.width, this.canvas.height);
-    
-    this.ctx.globalCompositeOperation = 'source-over';
   }
 
   private async applyVideoBackground(segmentation: any) {
     this.personCanvas.width = this.canvas.width;
     this.personCanvas.height = this.canvas.height;
+    
+    this.personCtx.drawImage(this.videoElement, 0, 0, this.canvas.width, this.canvas.height);
+    
+    const foregroundColor = { r: 255, g: 255, b: 255, a: 255 };
+    const backgroundColor = { r: 0, g: 0, b: 0, a: 0 };
+    const maskImage = this.bodyPix.toMask(segmentation, foregroundColor, backgroundColor, true);
+    
+    const tempCanvas = document.createElement('canvas');
+    tempCanvas.width = this.canvas.width;
+    tempCanvas.height = this.canvas.height;
+    const tempCtx = tempCanvas.getContext('2d')!;
+    tempCtx.putImageData(maskImage, 0, 0);
+    
+    tempCtx.filter = 'blur(3px)';
+    tempCtx.globalCompositeOperation = 'source-over';
+    tempCtx.drawImage(tempCanvas, 0, 0);
+    
+    this.personCtx.globalCompositeOperation = 'destination-in';
+    this.personCtx.drawImage(tempCanvas, 0, 0);
+    this.personCtx.globalCompositeOperation = 'source-over';
     
     if (this.backgroundVideoElement && this.backgroundVideoReady && !this.backgroundVideoElement.paused) {
       this.ctx.drawImage(this.backgroundVideoElement, 0, 0, this.canvas.width, this.canvas.height);
@@ -173,23 +198,8 @@ export class BackgroundProcessor {
       this.ctx.fillStyle = '#1a1a1a';
       this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
     }
-
-    const foregroundColor = { r: 0, g: 0, b: 0, a: 0 };
-    const backgroundColor = { r: 0, g: 0, b: 0, a: 255 };
-    const maskImage = this.bodyPix.toMask(segmentation, foregroundColor, backgroundColor, true);
     
-    this.personCtx.putImageData(maskImage, 0, 0);
-    
-    this.ctx.save();
-    this.ctx.filter = 'blur(4px)';
-    this.ctx.globalCompositeOperation = 'destination-out';
     this.ctx.drawImage(this.personCanvas, 0, 0);
-    this.ctx.restore();
-    
-    this.ctx.globalCompositeOperation = 'destination-over';
-    this.ctx.drawImage(this.videoElement, 0, 0, this.canvas.width, this.canvas.height);
-    
-    this.ctx.globalCompositeOperation = 'source-over';
   }
 
   private cleanupBackgroundVideo() {
