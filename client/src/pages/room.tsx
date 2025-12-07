@@ -3462,7 +3462,7 @@ export default function Room() {
                 onClick={() =>
                   setShowBackgroundControls(!showBackgroundControls)
                 }
-                className="rounded-full w-8 h-8 sm:w-10 sm:h-10 hidden xs:flex"
+                className="rounded-full w-8 h-8 sm:w-10 sm:h-10"
                 data-testid="button-toggle-background"
                 title="Background Effects"
               >
