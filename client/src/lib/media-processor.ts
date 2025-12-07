@@ -3,6 +3,9 @@ export class MediaProcessor {
   private sourceNode: MediaStreamAudioSourceNode | null = null;
   private gainNode: GainNode | null = null;
   private compressorNode: DynamicsCompressorNode | null = null;
+  private noiseGateNode: DynamicsCompressorNode | null = null;
+  private highPassFilter: BiquadFilterNode | null = null;
+  private lowPassFilter: BiquadFilterNode | null = null;
   private deEsserLowPass: BiquadFilterNode | null = null;
   private deEsserHighPass: BiquadFilterNode | null = null;
   private deEsserCompressor: DynamicsCompressorNode | null = null;
@@ -16,6 +19,24 @@ export class MediaProcessor {
       this.sourceNode = this.audioContext.createMediaStreamSource(stream);
       
       this.gainNode = this.audioContext.createGain();
+      
+      this.highPassFilter = this.audioContext.createBiquadFilter();
+      this.highPassFilter.type = 'highpass';
+      this.highPassFilter.frequency.value = 85;
+      this.highPassFilter.Q.value = 0.7;
+      
+      this.lowPassFilter = this.audioContext.createBiquadFilter();
+      this.lowPassFilter.type = 'lowpass';
+      this.lowPassFilter.frequency.value = 14000;
+      this.lowPassFilter.Q.value = 0.7;
+      
+      this.noiseGateNode = this.audioContext.createDynamicsCompressor();
+      this.noiseGateNode.threshold.value = -50;
+      this.noiseGateNode.knee.value = 40;
+      this.noiseGateNode.ratio.value = 12;
+      this.noiseGateNode.attack.value = 0;
+      this.noiseGateNode.release.value = 0.25;
+      
       this.compressorNode = this.audioContext.createDynamicsCompressor();
       
       this.deEsserLowPass = this.audioContext.createBiquadFilter();
@@ -62,6 +83,9 @@ export class MediaProcessor {
       
       this.sourceNode
         .connect(this.gainNode)
+        .connect(this.highPassFilter)
+        .connect(this.lowPassFilter)
+        .connect(this.noiseGateNode)
         .connect(this.compressorNode);
       
       this.deEsserMerge
@@ -87,8 +111,22 @@ export class MediaProcessor {
   }
 
   setNoiseSuppressionIntensity(intensity: number) {
+    const normalizedIntensity = intensity / 100;
+    
+    if (this.noiseGateNode) {
+      this.noiseGateNode.threshold.value = -60 + (normalizedIntensity * 30);
+      this.noiseGateNode.ratio.value = 4 + (normalizedIntensity * 16);
+    }
+    
+    if (this.highPassFilter) {
+      this.highPassFilter.frequency.value = 80 + (normalizedIntensity * 120);
+    }
+    
+    if (this.lowPassFilter) {
+      this.lowPassFilter.frequency.value = 16000 - (normalizedIntensity * 4000);
+    }
+    
     if (this.compressorNode) {
-      const normalizedIntensity = intensity / 100;
       this.compressorNode.threshold.value = -50 + (normalizedIntensity * 26);
       this.compressorNode.ratio.value = 1 + (normalizedIntensity * 19);
     }
@@ -125,6 +163,15 @@ export class MediaProcessor {
     }
     if (this.gainNode) {
       this.gainNode.disconnect();
+    }
+    if (this.highPassFilter) {
+      this.highPassFilter.disconnect();
+    }
+    if (this.lowPassFilter) {
+      this.lowPassFilter.disconnect();
+    }
+    if (this.noiseGateNode) {
+      this.noiseGateNode.disconnect();
     }
     if (this.compressorNode) {
       this.compressorNode.disconnect();

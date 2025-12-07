@@ -135,10 +135,9 @@ export class BackgroundProcessor {
   }
 
   private async applyVirtualBackground(segmentation: any) {
-    const { data: mask, width: maskWidth, height: maskHeight } = segmentation;
+    this.personCanvas.width = this.canvas.width;
+    this.personCanvas.height = this.canvas.height;
     
-    this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-
     if (this.backgroundImageElement && this.backgroundImageElement.complete) {
       this.ctx.drawImage(this.backgroundImageElement, 0, 0, this.canvas.width, this.canvas.height);
     } else {
@@ -146,50 +145,28 @@ export class BackgroundProcessor {
       this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
     }
 
-    const imageData = this.ctx.getImageData(0, 0, this.canvas.width, this.canvas.height);
+    const foregroundColor = { r: 0, g: 0, b: 0, a: 0 };
+    const backgroundColor = { r: 0, g: 0, b: 0, a: 255 };
+    const maskImage = this.bodyPix.toMask(segmentation, foregroundColor, backgroundColor, true);
     
-    this.personCanvas.width = this.canvas.width;
-    this.personCanvas.height = this.canvas.height;
-    this.personCtx.drawImage(this.videoElement, 0, 0, this.canvas.width, this.canvas.height);
-    const personData = this.personCtx.getImageData(0, 0, this.canvas.width, this.canvas.height);
-
-    const scaleX = this.canvas.width / maskWidth;
-    const scaleY = this.canvas.height / maskHeight;
-
-    for (let y = 0; y < this.canvas.height; y++) {
-      for (let x = 0; x < this.canvas.width; x++) {
-        const maskX = Math.floor(x / scaleX);
-        const maskY = Math.floor(y / scaleY);
-        const maskIndex = maskY * maskWidth + maskX;
-        const maskValue = mask[maskIndex] || 0;
-        
-        const pixelIndex = (y * this.canvas.width + x) * 4;
-        
-        if (maskValue > 0.3) {
-          const alpha = Math.min(1, (maskValue - 0.3) / 0.4);
-          const smoothAlpha = alpha * alpha * (3 - 2 * alpha);
-          
-          imageData.data[pixelIndex] = Math.round(
-            imageData.data[pixelIndex] * (1 - smoothAlpha) + personData.data[pixelIndex] * smoothAlpha
-          );
-          imageData.data[pixelIndex + 1] = Math.round(
-            imageData.data[pixelIndex + 1] * (1 - smoothAlpha) + personData.data[pixelIndex + 1] * smoothAlpha
-          );
-          imageData.data[pixelIndex + 2] = Math.round(
-            imageData.data[pixelIndex + 2] * (1 - smoothAlpha) + personData.data[pixelIndex + 2] * smoothAlpha
-          );
-        }
-      }
-    }
-
-    this.ctx.putImageData(imageData, 0, 0);
+    this.personCtx.putImageData(maskImage, 0, 0);
+    
+    this.ctx.save();
+    this.ctx.filter = 'blur(4px)';
+    this.ctx.globalCompositeOperation = 'destination-out';
+    this.ctx.drawImage(this.personCanvas, 0, 0);
+    this.ctx.restore();
+    
+    this.ctx.globalCompositeOperation = 'destination-over';
+    this.ctx.drawImage(this.videoElement, 0, 0, this.canvas.width, this.canvas.height);
+    
+    this.ctx.globalCompositeOperation = 'source-over';
   }
 
   private async applyVideoBackground(segmentation: any) {
-    const { data: mask, width: maskWidth, height: maskHeight } = segmentation;
+    this.personCanvas.width = this.canvas.width;
+    this.personCanvas.height = this.canvas.height;
     
-    this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-
     if (this.backgroundVideoElement && this.backgroundVideoReady && !this.backgroundVideoElement.paused) {
       this.ctx.drawImage(this.backgroundVideoElement, 0, 0, this.canvas.width, this.canvas.height);
     } else {
@@ -197,43 +174,22 @@ export class BackgroundProcessor {
       this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
     }
 
-    const imageData = this.ctx.getImageData(0, 0, this.canvas.width, this.canvas.height);
+    const foregroundColor = { r: 0, g: 0, b: 0, a: 0 };
+    const backgroundColor = { r: 0, g: 0, b: 0, a: 255 };
+    const maskImage = this.bodyPix.toMask(segmentation, foregroundColor, backgroundColor, true);
     
-    this.personCanvas.width = this.canvas.width;
-    this.personCanvas.height = this.canvas.height;
-    this.personCtx.drawImage(this.videoElement, 0, 0, this.canvas.width, this.canvas.height);
-    const personData = this.personCtx.getImageData(0, 0, this.canvas.width, this.canvas.height);
-
-    const scaleX = this.canvas.width / maskWidth;
-    const scaleY = this.canvas.height / maskHeight;
-
-    for (let y = 0; y < this.canvas.height; y++) {
-      for (let x = 0; x < this.canvas.width; x++) {
-        const maskX = Math.floor(x / scaleX);
-        const maskY = Math.floor(y / scaleY);
-        const maskIndex = maskY * maskWidth + maskX;
-        const maskValue = mask[maskIndex] || 0;
-        
-        const pixelIndex = (y * this.canvas.width + x) * 4;
-        
-        if (maskValue > 0.3) {
-          const alpha = Math.min(1, (maskValue - 0.3) / 0.4);
-          const smoothAlpha = alpha * alpha * (3 - 2 * alpha);
-          
-          imageData.data[pixelIndex] = Math.round(
-            imageData.data[pixelIndex] * (1 - smoothAlpha) + personData.data[pixelIndex] * smoothAlpha
-          );
-          imageData.data[pixelIndex + 1] = Math.round(
-            imageData.data[pixelIndex + 1] * (1 - smoothAlpha) + personData.data[pixelIndex + 1] * smoothAlpha
-          );
-          imageData.data[pixelIndex + 2] = Math.round(
-            imageData.data[pixelIndex + 2] * (1 - smoothAlpha) + personData.data[pixelIndex + 2] * smoothAlpha
-          );
-        }
-      }
-    }
-
-    this.ctx.putImageData(imageData, 0, 0);
+    this.personCtx.putImageData(maskImage, 0, 0);
+    
+    this.ctx.save();
+    this.ctx.filter = 'blur(4px)';
+    this.ctx.globalCompositeOperation = 'destination-out';
+    this.ctx.drawImage(this.personCanvas, 0, 0);
+    this.ctx.restore();
+    
+    this.ctx.globalCompositeOperation = 'destination-over';
+    this.ctx.drawImage(this.videoElement, 0, 0, this.canvas.width, this.canvas.height);
+    
+    this.ctx.globalCompositeOperation = 'source-over';
   }
 
   private cleanupBackgroundVideo() {
