@@ -146,11 +146,16 @@ export default function Room() {
     useState<QualityPreset>("interview");
   const [showBackgroundControls, setShowBackgroundControls] = useState(false);
   const [backgroundSettings, setBackgroundSettings] =
-    useState<BackgroundSettings>({
-      mode: "none",
-      blurAmount: 15,
-      backgroundImage: null,
-      backgroundVideo: null,
+    useState<BackgroundSettings>(() => {
+      const saved = localStorage.getItem('podcastmeet_background_settings');
+      if (saved) {
+        try {
+          return JSON.parse(saved);
+        } catch {
+          return { mode: "none", blurAmount: 15, backgroundImage: null, backgroundVideo: null };
+        }
+      }
+      return { mode: "none", blurAmount: 15, backgroundImage: null, backgroundVideo: null };
     });
   const [isBackgroundProcessing, setIsBackgroundProcessing] = useState(false);
   const [showFileSharing, setShowFileSharing] = useState(false);
@@ -334,6 +339,11 @@ export default function Room() {
 
     applyBackgroundProcessing();
   }, [backgroundSettings, processedStream]);
+
+  // Save background settings to localStorage
+  useEffect(() => {
+    localStorage.setItem('podcastmeet_background_settings', JSON.stringify(backgroundSettings));
+  }, [backgroundSettings]);
 
   // Push-to-talk state
   const pushToTalkActiveRef = useRef(false);
