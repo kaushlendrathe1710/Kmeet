@@ -8,6 +8,7 @@ import Home from "@/pages/home";
 import Room from "@/pages/room";
 import Login from "@/pages/login";
 import Dashboard from "@/pages/dashboard";
+import Profile from "@/pages/profile";
 import Admin from "@/pages/admin";
 import NotFound from "@/pages/not-found";
 
@@ -19,6 +20,11 @@ function Router() {
       <Route path="/dashboard">
         <RequireAuth>
           <Dashboard />
+        </RequireAuth>
+      </Route>
+      <Route path="/profile">
+        <RequireAuth>
+          <Profile />
         </RequireAuth>
       </Route>
       <Route path="/admin">
