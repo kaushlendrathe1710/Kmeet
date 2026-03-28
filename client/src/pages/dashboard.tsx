@@ -1,43 +1,49 @@
 import { useState } from "react";
-import { useLocation, Link } from "wouter";
+import { useLocation } from "wouter";
 import { useAuth } from "@/lib/auth";
 import { useQuery } from "@tanstack/react-query";
+import { useDevicePreview } from "@/hooks/use-device-preview";
 import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   Video,
+  VideoOff,
+  Mic,
+  MicOff,
   Plus,
   ArrowRight,
   History,
   Film,
   Settings,
-  LogOut,
   Crown,
   Calendar,
   Clock,
   Users,
-  Shield,
 } from "lucide-react";
 import type { Recording, MeetingHistory } from "@shared/schema";
-import {
-  AlertDialog,
-  AlertDialogOverlay,
-  AlertDialogAction,
-  AlertDialogContent,
-  AlertDialogTitle,
-  AlertDialogCancel,
-  AlertDialogDescription,
-} from "@/components/ui/alert-dialog";
 
 function generateMeetingId() {
   const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
@@ -50,9 +56,25 @@ function generateMeetingId() {
 
 export default function DashboardPage() {
   const [, navigate] = useLocation();
-  const { user, subscription, logout, isAdmin } = useAuth();
+  const { user, subscription } = useAuth();
   const [meetingCode, setMeetingCode] = useState("");
-  const [isLogoutDialogOpen, setIsLogoutDialogOpen] = useState(false);
+  const [isPreJoinOpen, setIsPreJoinOpen] = useState(false);
+
+  const {
+    stream,
+    audioDevices,
+    videoDevices,
+    selectedAudio,
+    setSelectedAudio,
+    selectedVideo,
+    setSelectedVideo,
+    isAudioEnabled,
+    isVideoEnabled,
+    toggleAudio,
+    toggleVideo,
+    error: previewError,
+    clearError,
+  } = useDevicePreview({ active: isPreJoinOpen });
 
   const { data: recordingsData } = useQuery<{ recordings: Recording[] }>({
     queryKey: ["/api/recordings"],
@@ -65,7 +87,23 @@ export default function DashboardPage() {
   });
 
   const handleNewMeeting = () => {
+    setIsPreJoinOpen(true);
+  };
+
+  const handleContinueToMeeting = () => {
     const roomId = generateMeetingId();
+    const displayName = user?.fullName || user?.email || "Anonymous";
+    localStorage.setItem("participantName", displayName);
+    localStorage.setItem(
+      "podcastmeet_prejoin_media_prefs",
+      JSON.stringify({
+        isAudioEnabled,
+        isVideoEnabled,
+        selectedAudio,
+        selectedVideo,
+      })
+    );
+    setIsPreJoinOpen(false);
     navigate(`/room/${roomId}`);
   };
 
@@ -76,111 +114,14 @@ export default function DashboardPage() {
     }
   };
 
-  const handleLogout = async () => {
-    await logout();
-    navigate("/login");
-  };
-
   const recordings = recordingsData?.recordings || [];
   const meetings = meetingsData?.meetings || [];
 
-  const getInitials = (name: string | null | undefined) => {
-    if (!name) return "U";
-    return name
-      .split(" ")
-      .map((n) => n[0])
-      .join("")
-      .toUpperCase()
-      .slice(0, 2);
-  };
+  const displayName = user?.fullName || user?.email || "Anonymous";
 
   return (
-    <div className="min-h-screen bg-background">
-      <header className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-        <div className="container mx-auto px-4 py-4">
-          <div className="flex items-center justify-between gap-4">
-            <Link href="/" className="flex items-center gap-3">
-              <div className="bg-primary/10 p-2 rounded-lg">
-                <Video className="h-6 w-6 text-primary" />
-              </div>
-              <h1 className="text-xl font-bold">PodcastMeet</h1>
-            </Link>
-
-            <div className="flex items-center gap-3">
-              {isAdmin && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  asChild
-                  data-testid="link-admin"
-                >
-                  <Link href="/admin">
-                    <Shield className="h-4 w-4 mr-2" />
-                    Admin
-                  </Link>
-                </Button>
-              )}
-
-              <Link href="/profile" className="flex items-center gap-2">
-                <Avatar className="h-8 w-8">
-                  <AvatarFallback className="bg-primary/10 text-primary text-sm">
-                    {getInitials(user?.fullName)}
-                  </AvatarFallback>
-                </Avatar>
-                <div className="hidden sm:block">
-                  <p className="text-sm font-medium leading-none">{user?.fullName || "User"}</p>
-                  <p className="text-xs text-muted-foreground">{user?.email}</p>
-                </div>
-              </Link>
-
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => setIsLogoutDialogOpen(true)}
-                data-testid="button-logout"
-              >
-                <LogOut className="h-4 w-4" />
-              </Button>
-              <AlertDialog
-                open={isLogoutDialogOpen}
-                onOpenChange={setIsLogoutDialogOpen}
-              >
-                <AlertDialogOverlay className="fixed inset-0 bg-black/50" />
-                <AlertDialogContent className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-background rounded-lg p-6 w-full max-w-sm">
-                  <AlertDialogTitle className="text-lg font-semibold">
-                    Confirm Logout
-                  </AlertDialogTitle>
-                  <AlertDialogDescription className="mt-2 text-sm text-muted-foreground">
-                    Are you sure you want to log out?
-                  </AlertDialogDescription>
-                  <div className="mt-4 flex justify-end gap-2">
-                    <AlertDialogCancel asChild>
-                      <Button
-                        variant="outline"
-                        data-testid="button-cancel-logout"
-                      >
-                        Cancel
-                      </Button>
-                    </AlertDialogCancel>
-                    <AlertDialogAction asChild>
-                      <Button
-                        variant="destructive"
-                        onClick={handleLogout}
-                        data-testid="button-confirm-logout"
-                      >
-                        Log Out
-                      </Button>
-                    </AlertDialogAction>
-                  </div>
-                </AlertDialogContent>
-              </AlertDialog>
-            </div>
-          </div>
-        </div>
-      </header>
-
-      <main className="container mx-auto px-4 py-8">
-        <div className="grid lg:grid-cols-3 gap-8">
+    <>
+    <div className="grid lg:grid-cols-3 gap-8">
           <div className="lg:col-span-2 space-y-6">
             <div className="grid sm:grid-cols-2 gap-4">
               <Card
@@ -434,8 +375,147 @@ export default function DashboardPage() {
               </CardContent>
             </Card>
           </div>
-        </div>
-      </main>
     </div>
+
+      <Dialog
+        open={isPreJoinOpen}
+        onOpenChange={(open) => {
+          setIsPreJoinOpen(open);
+          if (!open) {
+            clearError();
+          }
+        }}
+      >
+        <DialogContent className="max-w-3xl" data-testid="dialog-prejoin-meeting">
+          <DialogHeader>
+            <DialogTitle>Prepare before joining</DialogTitle>
+            <DialogDescription>
+              Check your camera, microphone, and devices before starting the meeting.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="grid md:grid-cols-2 gap-6">
+            <div className="space-y-4">
+              <div className="relative aspect-video bg-muted rounded-lg overflow-hidden">
+                {isVideoEnabled && stream ? (
+                  <video
+                    autoPlay
+                    muted
+                    playsInline
+                    ref={(node) => {
+                      if (node && stream) {
+                        node.srcObject = stream;
+                      }
+                    }}
+                    className="w-full h-full object-cover"
+                    data-testid="video-preview-dashboard"
+                  />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center bg-muted">
+                    <VideoOff className="w-16 h-16 text-muted-foreground" />
+                  </div>
+                )}
+
+                <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-2">
+                  <Button
+                    size="icon"
+                    variant={isAudioEnabled ? "default" : "destructive"}
+                    onClick={toggleAudio}
+                    className="rounded-full"
+                    type="button"
+                    data-testid="button-toggle-audio-prejoin"
+                  >
+                    {isAudioEnabled ? (
+                      <Mic className="w-5 h-5" />
+                    ) : (
+                      <MicOff className="w-5 h-5" />
+                    )}
+                  </Button>
+
+                  <Button
+                    size="icon"
+                    variant={isVideoEnabled ? "default" : "destructive"}
+                    onClick={toggleVideo}
+                    className="rounded-full"
+                    type="button"
+                    data-testid="button-toggle-video-prejoin"
+                  >
+                    {isVideoEnabled ? (
+                      <Video className="w-5 h-5" />
+                    ) : (
+                      <VideoOff className="w-5 h-5" />
+                    )}
+                  </Button>
+                </div>
+              </div>
+
+              {previewError && (
+                <p className="text-sm text-destructive" data-testid="text-prejoin-error">
+                  {previewError}
+                </p>
+              )}
+            </div>
+
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="display-name">Name (visible to others)</Label>
+                <Input id="display-name" value={displayName} disabled readOnly />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="audio-device">Microphone</Label>
+                <Select value={selectedAudio} onValueChange={setSelectedAudio}>
+                  <SelectTrigger id="audio-device" data-testid="select-audio-device-prejoin">
+                    <SelectValue placeholder="Select microphone" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {audioDevices.map((device, index) => {
+                      const value = device.deviceId || `audio-${index}`;
+                      return (
+                        <SelectItem key={value} value={value}>
+                          {device.label || `Microphone ${index + 1}`}
+                        </SelectItem>
+                      );
+                    })}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="video-device">Camera</Label>
+                <Select value={selectedVideo} onValueChange={setSelectedVideo}>
+                  <SelectTrigger id="video-device" data-testid="select-video-device-prejoin">
+                    <SelectValue placeholder="Select camera" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {videoDevices.map((device, index) => {
+                      const value = device.deviceId || `video-${index}`;
+                      return (
+                        <SelectItem key={value} value={value}>
+                          {device.label || `Camera ${index + 1}`}
+                        </SelectItem>
+                      );
+                    })}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setIsPreJoinOpen(false)}
+              type="button"
+            >
+              Cancel
+            </Button>
+            <Button onClick={handleContinueToMeeting} type="button" data-testid="button-continue-to-meeting">
+              Start Meeting
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
