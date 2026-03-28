@@ -31,6 +31,8 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth";
 
+const PREJOIN_MEDIA_PREFS_KEY = "podcastmeet_prejoin_media_prefs";
+
 export default function Home() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
@@ -189,6 +191,15 @@ export default function Home() {
 
     const newRoomCode = generateRoomCode();
     localStorage.setItem("participantName", name);
+    localStorage.setItem(
+      PREJOIN_MEDIA_PREFS_KEY,
+      JSON.stringify({
+        isAudioEnabled,
+        isVideoEnabled,
+        selectedAudio,
+        selectedVideo,
+      })
+    );
     setLocation(`/room/${newRoomCode}`);
   };
 
@@ -212,6 +223,15 @@ export default function Home() {
     }
 
     localStorage.setItem("participantName", name);
+    localStorage.setItem(
+      PREJOIN_MEDIA_PREFS_KEY,
+      JSON.stringify({
+        isAudioEnabled,
+        isVideoEnabled,
+        selectedAudio,
+        selectedVideo,
+      })
+    );
     setLocation(`/room/${roomCode.toUpperCase()}`);
   };
 
@@ -229,10 +249,10 @@ export default function Home() {
 
   // Set name from user profile if authenticated
   useEffect(() => {
-    if (isAuthenticated && user?.fullName && !name) {
-      setName(user.fullName);
+    if (isAuthenticated && user && !name) {
+      setName(user.fullName || user.email || "");
     }
-  }, [isAuthenticated, user?.fullName, name]);
+  }, [isAuthenticated, user, name]);
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
@@ -244,7 +264,7 @@ export default function Home() {
             </div>
             <h1 className="font-bold text-lg">PodcastMeet</h1>
           </div>
-          
+
           <div className="flex items-center gap-2">
             {authLoading ? (
               <div className="w-5 h-5 rounded-full border-2 border-primary border-t-transparent animate-spin" />
@@ -266,7 +286,7 @@ export default function Home() {
           </div>
         </div>
       </header>
-      
+
       <div className="flex-1 flex items-center justify-center p-4">
       <div className="w-full max-w-6xl grid md:grid-cols-2 gap-6">
         <Card className="md:col-span-1">
@@ -390,6 +410,8 @@ export default function Home() {
                   placeholder="Enter your name"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
+                  readOnly={isAuthenticated}
+                  disabled={isAuthenticated}
                   data-testid="input-name"
                 />
               </div>

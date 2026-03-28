@@ -83,6 +83,28 @@ import {
 } from "@/components/ui/dialog";
 import type { Participant, ChatMessage } from "@shared/schema";
 
+const PREJOIN_MEDIA_PREFS_KEY = "podcastmeet_prejoin_media_prefs";
+
+interface PreJoinMediaPrefs {
+  isAudioEnabled?: boolean;
+  isVideoEnabled?: boolean;
+  selectedAudio?: string;
+  selectedVideo?: string;
+}
+
+function consumePreJoinMediaPrefs(): PreJoinMediaPrefs | null {
+  if (typeof window === "undefined") return null;
+
+  try {
+    const raw = localStorage.getItem(PREJOIN_MEDIA_PREFS_KEY);
+    localStorage.removeItem(PREJOIN_MEDIA_PREFS_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw) as PreJoinMediaPrefs;
+  } catch {
+    return null;
+  }
+}
+
 export default function Room() {
   const [, params] = useRoute("/room/:roomId");
   const [, setLocation] = useLocation();
@@ -90,19 +112,26 @@ export default function Room() {
   const { user, subscription } = useAuth();
 
   const roomId = params?.roomId || "";
-  
+
   // Use authenticated user's name, fall back to localStorage, then "Anonymous"
   const participantName = useMemo(() => {
     if (user?.fullName) return user.fullName;
     return localStorage.getItem("participantName") || "Anonymous";
   }, [user?.fullName]);
-  
+
   const [participantId] = useState(() =>
     Math.random().toString(36).substring(7)
   );
 
-  const [isAudioEnabled, setIsAudioEnabled] = useState(true);
-  const [isVideoEnabled, setIsVideoEnabled] = useState(true);
+  const preJoinPrefsRef = useRef<PreJoinMediaPrefs | null>(
+    consumePreJoinMediaPrefs()
+  );
+
+  const initialAudioEnabled = preJoinPrefsRef.current?.isAudioEnabled ?? true;
+  const initialVideoEnabled = preJoinPrefsRef.current?.isVideoEnabled ?? true;
+
+  const [isAudioEnabled, setIsAudioEnabled] = useState(initialAudioEnabled);
+  const [isVideoEnabled, setIsVideoEnabled] = useState(initialVideoEnabled);
   const [isScreenSharing, setIsScreenSharing] = useState(false);
   const [screenShareMode, setScreenShareMode] = useState<"screen-only" | "screen-and-camera">("screen-and-camera");
   const [isRecording, setIsRecording] = useState(false);
@@ -278,12 +307,11 @@ export default function Room() {
       setLocation("/");
       return;
     }
-    
+
     const recoveredState = recoverRoomState(roomId);
     if (recoveredState) {
-      // NOTE: We intentionally do NOT recover isAudioEnabled/isVideoEnabled
-      // Camera and mic should always start fresh (enabled) on room join
-      // to prevent bugs where corrupted state persists across sessions
+      // Intentionally do not recover audio/video from autosave.
+      // We use explicit pre-join choices for this room entry instead.
       if (recoveredState.videoQuality)
         setVideoQuality(recoveredState.videoQuality as VideoQualityLevel);
       if (recoveredState.currentPreset)
@@ -512,77 +540,107 @@ export default function Room() {
 
       let stream: MediaStream;
 
+      const preferredAudioDeviceId = preJoinPrefsRef.current?.selectedAudio;
+      const preferredVideoDeviceId = preJoinPrefsRef.current?.selectedVideo;
+
+      const audioConstraints: MediaTrackConstraints = {
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true,
+        ...(preferredAudioDeviceId
+          ? { deviceId: { exact: preferredAudioDeviceId } }
+          : {}),
+      };
+
+      const videoConstraints = isMobile
+        ? {
+            facingMode: "user" as const,
+            width: { ideal: 1280, max: 1920 },
+            height: { ideal: 720, max: 1080 },
+            ...(preferredVideoDeviceId
+              ? { deviceId: { exact: preferredVideoDeviceId } }
+              : {}),
+          }
+        : {
+            width: { ideal: 1920, max: 1920 },
+            height: { ideal: 1080, max: 1080 },
+            ...(preferredVideoDeviceId
+              ? { deviceId: { exact: preferredVideoDeviceId } }
+              : {}),
+          };
+
       // iOS Safari has issues requesting audio+video together - request separately
       if (isIOS) {
         console.log(
           "[Media] iOS detected - requesting video and audio separately"
         );
         try {
-          // Request video first
-          const videoStream = await navigator.mediaDevices.getUserMedia({
-            video: { facingMode: "user" },
-          });
-          console.log("[Media] ✅ Got video stream on iOS");
+          const tracks: MediaStreamTrack[] = [];
 
-          // Then request audio
-          const audioStream = await navigator.mediaDevices.getUserMedia({
-            audio: true,
-          });
-          console.log("[Media] ✅ Got audio stream on iOS");
+          if (isVideoEnabled) {
+            const videoStream = await navigator.mediaDevices.getUserMedia({
+              video: videoConstraints,
+            });
+            tracks.push(...videoStream.getVideoTracks());
+            console.log("[Media] ✅ Got video stream on iOS");
+          }
 
-          // Combine streams
-          stream = new MediaStream([
-            ...videoStream.getVideoTracks(),
-            ...audioStream.getAudioTracks(),
-          ]);
+          if (isAudioEnabled) {
+            const audioStream = await navigator.mediaDevices.getUserMedia({
+              audio: audioConstraints,
+            });
+            tracks.push(...audioStream.getAudioTracks());
+            console.log("[Media] ✅ Got audio stream on iOS");
+          }
+
+          stream = new MediaStream(tracks);
           console.log("[Media] ✅ Combined iOS streams");
         } catch (iosError) {
           console.warn(
             "[Media] iOS separate request failed, trying combined:",
             iosError
           );
-          // Fallback to combined request
-          stream = await navigator.mediaDevices.getUserMedia({
-            video: { facingMode: "user" },
-            audio: true,
-          });
+          if (!isAudioEnabled && !isVideoEnabled) {
+            stream = new MediaStream();
+          } else {
+            stream = await navigator.mediaDevices.getUserMedia({
+              video: isVideoEnabled ? videoConstraints : false,
+              audio: isAudioEnabled ? audioConstraints : false,
+            });
+          }
         }
       } else {
-        // Non-iOS: use standard approach with constraints
-        const videoConstraints = isMobile
-          ? {
-              facingMode: "user",
-              width: { ideal: 1280, max: 1920 },
-              height: { ideal: 720, max: 1080 },
-            }
-          : {
-              width: { ideal: 1920, max: 1920 },
-              height: { ideal: 1080, max: 1080 },
-            };
-
-        try {
-          stream = await navigator.mediaDevices.getUserMedia({
-            video: videoConstraints,
-            audio: {
-              echoCancellation: true,
-              noiseSuppression: true,
-              autoGainControl: true,
-            },
-          });
-          console.log("[Media] ✅ Got media stream with preferred settings");
-        } catch (preferredError) {
-          console.warn(
-            "[Media] Preferred settings failed, trying basic constraints:",
-            preferredError
-          );
-          // Fallback to basic constraints
-          stream = await navigator.mediaDevices.getUserMedia({
-            video: true,
-            audio: true,
-          });
-          console.log("[Media] ✅ Got media stream with basic settings");
+        if (!isAudioEnabled && !isVideoEnabled) {
+          stream = new MediaStream();
+          console.log("[Media] ✅ Starting with camera and microphone disabled");
+        } else {
+          try {
+            stream = await navigator.mediaDevices.getUserMedia({
+              video: isVideoEnabled ? videoConstraints : false,
+              audio: isAudioEnabled ? audioConstraints : false,
+            });
+            console.log("[Media] ✅ Got media stream with preferred settings");
+          } catch (preferredError) {
+            console.warn(
+              "[Media] Preferred settings failed, trying basic constraints:",
+              preferredError
+            );
+            stream = await navigator.mediaDevices.getUserMedia({
+              video: isVideoEnabled,
+              audio: isAudioEnabled,
+            });
+            console.log("[Media] ✅ Got media stream with basic settings");
+          }
         }
       }
+
+      // Ensure final track enabled flags match selected pre-join state.
+      stream.getAudioTracks().forEach((track) => {
+        track.enabled = isAudioEnabled;
+      });
+      stream.getVideoTracks().forEach((track) => {
+        track.enabled = isVideoEnabled;
+      });
 
       mediaProcessorRef.current = new MediaProcessor();
       const enhanced =
@@ -647,8 +705,8 @@ export default function Room() {
         id: participantId,
         name: participantName,
         roomId,
-        isAudioEnabled: true,
-        isVideoEnabled: true,
+        isAudioEnabled,
+        isVideoEnabled,
         isScreenSharing: false,
         isHost: false,
         approvalStatus: "pending",
@@ -1694,6 +1752,29 @@ export default function Room() {
         })
       );
 
+      // Apply initial media state from pre-join preferences.
+      if (!isAudioEnabled) {
+        ws.send(
+          JSON.stringify({
+            type: "toggle-audio",
+            roomId,
+            participantId,
+            isEnabled: false,
+          })
+        );
+      }
+
+      if (!isVideoEnabled) {
+        ws.send(
+          JSON.stringify({
+            type: "toggle-video",
+            roomId,
+            participantId,
+            isEnabled: false,
+          })
+        );
+      }
+
       if (reconnectAttemptsRef.current > 0) {
         toast({
           title: "Reconnected",
@@ -2713,8 +2794,8 @@ export default function Room() {
 
     toast({
       title: "Screen Sharing Started",
-      description: mode === "screen-only" 
-        ? "Sharing screen only" 
+      description: mode === "screen-only"
+        ? "Sharing screen only"
         : "Sharing screen with camera visible",
     });
   };
@@ -3614,7 +3695,7 @@ export default function Room() {
           hasSubscription={
             (subscription?.status === 'active' || subscription?.status === 'trial') &&
             Array.isArray(subscription?.plan?.features) &&
-            (subscription.plan.features as string[]).some(f => 
+            (subscription.plan.features as string[]).some(f =>
               ['animatedBackgrounds', 'videoBackgrounds', 'premiumBackgrounds'].includes(f)
             )
           }
