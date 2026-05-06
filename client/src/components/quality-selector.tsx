@@ -7,7 +7,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuLabel,
 } from "@/components/ui/dropdown-menu";
-import { Settings, Check } from "lucide-react";
+import { Settings2, Check } from "lucide-react";
 import type { VideoQualityLevel } from "@/hooks/use-bandwidth-adaptation";
 
 interface QualitySelectorProps {
@@ -47,7 +47,7 @@ export function QualitySelector({
           data-testid="button-quality-selector"
           title="Video Quality"
         >
-          <Settings className="w-4 h-4" />
+          <Settings2 className="w-4 h-4"/>
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-56">

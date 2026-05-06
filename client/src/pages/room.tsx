@@ -188,6 +188,99 @@ export default function Room() {
     });
   const [isBackgroundProcessing, setIsBackgroundProcessing] = useState(false);
   const [showFileSharing, setShowFileSharing] = useState(false);
+  // Ensure only one side panel/dialog is open at a time.
+  const toggleExclusive = useCallback(
+    (panel: "chat" | "participants" | "settings" | "joinRequests" | "backgroundControls" | "fileSharing") => {
+      switch (panel) {
+        case "chat":
+          setShowChat((prev) => {
+            const next = !prev;
+            if (next) {
+              setShowParticipants(false);
+              setShowSettings(false);
+              setShowJoinRequests(false);
+              setShowBackgroundControls(false);
+              setShowFileSharing(false);
+            }
+            return next;
+          });
+          break;
+        case "participants":
+          setShowParticipants((prev) => {
+            const next = !prev;
+            if (next) {
+              setShowChat(false);
+              setShowSettings(false);
+              setShowJoinRequests(false);
+              setShowBackgroundControls(false);
+              setShowFileSharing(false);
+            }
+            return next;
+          });
+          break;
+        case "settings":
+          setShowSettings((prev) => {
+            const next = !prev;
+            if (next) {
+              setShowChat(false);
+              setShowParticipants(false);
+              setShowJoinRequests(false);
+              setShowBackgroundControls(false);
+              setShowFileSharing(false);
+            }
+            return next;
+          });
+          break;
+        case "joinRequests":
+          setShowJoinRequests((prev) => {
+            const next = !prev;
+            if (next) {
+              setShowChat(false);
+              setShowParticipants(false);
+              setShowSettings(false);
+              setShowBackgroundControls(false);
+              setShowFileSharing(false);
+            }
+            return next;
+          });
+          break;
+        case "backgroundControls":
+          setShowBackgroundControls((prev) => {
+            const next = !prev;
+            if (next) {
+              setShowChat(false);
+              setShowParticipants(false);
+              setShowSettings(false);
+              setShowJoinRequests(false);
+              setShowFileSharing(false);
+            }
+            return next;
+          });
+          break;
+        case "fileSharing":
+          setShowFileSharing((prev) => {
+            const next = !prev;
+            if (next) {
+              setShowChat(false);
+              setShowParticipants(false);
+              setShowSettings(false);
+              setShowJoinRequests(false);
+              setShowBackgroundControls(false);
+            }
+            return next;
+          });
+          break;
+      }
+    },
+    [
+      setShowChat,
+      setShowParticipants,
+      setShowSettings,
+      setShowJoinRequests,
+      setShowBackgroundControls,
+      setShowFileSharing,
+    ]
+  );
   const [sharedFiles, setSharedFiles] = useState<
     Array<{
       id: string;
@@ -418,7 +511,7 @@ export default function Room() {
           recordingControlsRef.current?.toggleRecording();
           break;
         case "c":
-          setShowChat((prev) => !prev);
+          toggleExclusive("chat");
           break;
         case "p":
           if (isRecording) {
@@ -426,7 +519,7 @@ export default function Room() {
             recordingControlsRef.current?.pauseRecording();
           } else {
             // When not recording, P toggles participants panel
-            setShowParticipants((prev) => !prev);
+            toggleExclusive("participants");
           }
           break;
         case "u":
@@ -3469,7 +3562,7 @@ export default function Room() {
               <Button
                 size="icon"
                 variant={showChat ? "default" : "secondary"}
-                onClick={() => setShowChat(!showChat)}
+                onClick={() => toggleExclusive("chat")}
                 className="rounded-full w-8 h-8 sm:w-10 sm:h-10"
                 data-testid="button-toggle-chat"
               >
@@ -3479,7 +3572,7 @@ export default function Room() {
               <Button
                 size="icon"
                 variant={showParticipants ? "default" : "secondary"}
-                onClick={() => setShowParticipants(!showParticipants)}
+                onClick={() => toggleExclusive("participants")}
                 className="rounded-full w-8 h-8 sm:w-10 sm:h-10"
                 data-testid="button-toggle-participants"
               >
@@ -3540,7 +3633,7 @@ export default function Room() {
               <Button
                 size="icon"
                 variant={showSettings ? "default" : "secondary"}
-                onClick={() => setShowSettings(!showSettings)}
+                onClick={() => toggleExclusive("settings")}
                 className="rounded-full w-8 h-8 sm:w-10 sm:h-10"
                 data-testid="button-toggle-settings"
               >
@@ -3550,9 +3643,7 @@ export default function Room() {
               <Button
                 size="icon"
                 variant={showBackgroundControls ? "default" : "secondary"}
-                onClick={() =>
-                  setShowBackgroundControls(!showBackgroundControls)
-                }
+                onClick={() => toggleExclusive("backgroundControls")}
                 className="rounded-full w-8 h-8 sm:w-10 sm:h-10"
                 data-testid="button-toggle-background"
                 title="Background Effects"
@@ -3563,7 +3654,7 @@ export default function Room() {
               <Button
                 size="icon"
                 variant={showFileSharing ? "default" : "secondary"}
-                onClick={() => setShowFileSharing(!showFileSharing)}
+                onClick={() => toggleExclusive("fileSharing")}
                 className="rounded-full w-8 h-8 sm:w-10 sm:h-10 hidden xs:flex"
                 data-testid="button-toggle-files"
                 title="File Sharing"
@@ -3592,7 +3683,7 @@ export default function Room() {
                   <Button
                     size="icon"
                     variant={showJoinRequests ? "default" : "secondary"}
-                    onClick={() => setShowJoinRequests(!showJoinRequests)}
+                    onClick={() => toggleExclusive("joinRequests")}
                     className="rounded-full w-8 h-8 sm:w-10 sm:h-10 hidden xs:flex"
                     data-testid="button-toggle-requests"
                   >
@@ -3686,7 +3777,18 @@ export default function Room() {
 
         <BackgroundControls
           open={showBackgroundControls}
-          onOpenChange={setShowBackgroundControls}
+          onOpenChange={(open) => {
+            if (open) {
+              setShowBackgroundControls(true);
+              setShowChat(false);
+              setShowParticipants(false);
+              setShowSettings(false);
+              setShowJoinRequests(false);
+              setShowFileSharing(false);
+            } else {
+              setShowBackgroundControls(false);
+            }
+          }}
           settings={backgroundSettings}
           onSettingsChange={(settings) =>
             setBackgroundSettings((prev) => ({ ...prev, ...settings }))
